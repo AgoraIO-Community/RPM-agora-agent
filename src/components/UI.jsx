@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useChat } from "../hooks/useChat";
 import { useAgora } from "../hooks/useAgora";
+import { usePlayFab } from "../hooks/usePlayFab";
 import Settings from "./Settings";
 import { CombinedChat } from "./CombinedChat";
 import AgoraProductsPanel from "./AgoraProductsPanel";
 
 export const UI = ({ hidden, currentExpression, setCurrentExpression, currentAnimation, setCurrentAnimation, currentAvatar, setCurrentAvatar, ...props }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState('agora');
   
   // Panel visibility states - Combined animation panel
   const [showConnectionPanel, setShowConnectionPanel] = useState(false);
@@ -14,6 +16,100 @@ export const UI = ({ hidden, currentExpression, setCurrentExpression, currentAni
   
   const { chat, loading, cameraZoomed, setCameraZoomed, message } = useChat();
   const { isConnected, isJoined, joinChannel, leaveChannel, audioLevel, config, agentId } = useAgora();
+  const { isAuthenticated: isPlayFabAuthenticated } = usePlayFab();
+
+  // Function to check if all required configurations are present
+  const checkConfigurations = () => {
+    const agoraConfig = {
+      appId: sessionStorage.getItem('VITE_AGORA_APP_ID') || import.meta.env.VITE_AGORA_APP_ID,
+      token: sessionStorage.getItem('VITE_AGORA_TOKEN') || import.meta.env.VITE_AGORA_TOKEN
+    };
+
+    const convoaiConfig = {
+      apiKey: sessionStorage.getItem('VITE_RESTFUL_API_KEY') || import.meta.env.VITE_RESTFUL_API_KEY,
+      password: sessionStorage.getItem('VITE_RESTFUL_PASSWORD') || import.meta.env.VITE_RESTFUL_PASSWORD
+    };
+
+    const llmConfig = {
+      apiKey: sessionStorage.getItem('VITE_LLM_API_KEY') || import.meta.env.VITE_LLM_API_KEY
+    };
+
+    const ttsConfig = {
+      apiKey: sessionStorage.getItem('VITE_TTS_API_KEY') || import.meta.env.VITE_TTS_API_KEY
+    };
+
+    // Helper function to check if a value is a real credential (not a placeholder)
+    const isValidCredential = (value) => {
+      return value &&
+             value !== '' &&
+             !value.includes('your-') &&
+             !value.includes('replace-') &&
+             !value.includes('api-key') &&
+             !value.includes('password');
+    };
+
+    const hasValidAgoraConfig = isValidCredential(agoraConfig.appId) && isValidCredential(agoraConfig.token);
+    const hasValidConvoAICredentials = isValidCredential(convoaiConfig.apiKey) && isValidCredential(convoaiConfig.password);
+    const hasValidLLMKey = isValidCredential(llmConfig.apiKey);
+    const hasValidTTSKey = isValidCredential(ttsConfig.apiKey);
+
+    return {
+      hasValidAgoraConfig,
+      hasValidConvoAICredentials,
+      hasValidLLMKey,
+      hasValidTTSKey,
+      hasValidPlayFabAuth: isPlayFabAuthenticated,
+      allConfigsValid: hasValidAgoraConfig && hasValidConvoAICredentials && hasValidLLMKey && hasValidTTSKey && isPlayFabAuthenticated
+    };
+  };
+
+  // Function to handle connect button with configuration validation
+  const handleConnect = async () => {
+    const configStatus = checkConfigurations();
+
+    if (!configStatus.allConfigsValid) {
+      console.log('❌ Missing configurations detected:', configStatus);
+
+      // Determine which tab to open based on missing configurations
+      let targetTab = 'agora';
+
+      if (!configStatus.hasValidAgoraConfig) {
+        targetTab = 'agora';
+      } else if (!configStatus.hasValidConvoAICredentials) {
+        targetTab = 'convoai';
+      } else if (!configStatus.hasValidLLMKey) {
+        targetTab = 'llm';
+      } else if (!configStatus.hasValidTTSKey) {
+        targetTab = 'tts';
+      } else if (!configStatus.hasValidPlayFabAuth) {
+        targetTab = 'playfab';
+      }
+
+      // Open settings panel with the appropriate tab
+      setShowSettings(true);
+      setSettingsInitialTab(targetTab);
+
+      // Show user-friendly message
+      const missingItems = [];
+      if (!configStatus.hasValidAgoraConfig) missingItems.push('Agora credentials');
+      if (!configStatus.hasValidConvoAICredentials) missingItems.push('ConvoAI API credentials');
+      if (!configStatus.hasValidLLMKey) missingItems.push('LLM API key');
+      if (!configStatus.hasValidTTSKey) missingItems.push('TTS API key');
+      if (!configStatus.hasValidPlayFabAuth) missingItems.push('PlayFab authentication');
+
+      alert(`⚠️ Configuration Required\n\nPlease configure the following before connecting:\n• ${missingItems.join('\n• ')}\n\nThe settings panel has been opened automatically.`);
+
+      return;
+    }
+
+    // All configurations are valid, proceed with connection
+    try {
+      await joinChannel();
+    } catch (error) {
+      console.error('Failed to connect:', error);
+      alert(`Connection failed: ${error.message}`);
+    }
+  };
 
   // Available avatars
   const availableAvatars = [
@@ -309,7 +405,7 @@ export const UI = ({ hidden, currentExpression, setCurrentExpression, currentAni
                   <div className="mt-3 pt-2 border-t border-gray-300">
                     {!isJoined ? (
                       <button
-                        onClick={joinChannel}
+                        onClick={handleConnect}
                         className="pointer-events-auto bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 w-full justify-center"
                         title="Connect to ConvoAI Channel"
                       >
@@ -363,7 +459,10 @@ export const UI = ({ hidden, currentExpression, setCurrentExpression, currentAni
           <div className="flex gap-2">
             {/* Settings Button (Burger Menu) */}
             <button
-              onClick={() => setShowSettings(true)}
+              onClick={() => {
+                setShowSettings(true);
+                setSettingsInitialTab('agora');
+              }}
               className="pointer-events-auto backdrop-blur-md bg-white bg-opacity-50 p-3 rounded-lg hover:bg-opacity-70 transition-colors"
               title="Configuration Settings"
             >
@@ -456,6 +555,7 @@ export const UI = ({ hidden, currentExpression, setCurrentExpression, currentAni
       <Settings 
         isOpen={showSettings} 
         onClose={() => setShowSettings(false)} 
+        initialTab={settingsInitialTab}
       />
       
       {/* Combined Chat Component */}

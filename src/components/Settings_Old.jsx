@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import PlayFabAuth from './PlayFabAuth';
 
-const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
-  const [activeTab, setActiveTab] = useState(initialTab);
+const Settings = ({ isOpen, onClose }) => {
+  const [activeTab, setActiveTab] = useState('agora');
   const [settings, setSettings] = useState({
     // Agora Configuration
     agoraAppId: '',
@@ -32,7 +32,7 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
     asrLanguage: '',
   });
 
-  // Load settings from environment variables when component opens
+  // Load current environment variables when component mounts
   useEffect(() => {
     if (isOpen) {
       setSettings({
@@ -66,33 +66,39 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
     }
   }, [isOpen]);
 
-  // Update active tab when initialTab prop changes
-  useEffect(() => {
-    if (isOpen && initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [isOpen, initialTab]);
-
-  const handleInputChange = (key, value) => {
+  const handleInputChange = (field, value) => {
     setSettings(prev => ({
       ...prev,
-      [key]: value
+      [field]: value
     }));
   };
 
   const handleSave = () => {
-    // Convert camelCase keys to VITE_UPPER_CASE format and save to sessionStorage
-    Object.entries(settings).forEach(([key, value]) => {
-      // Convert camelCase to UPPER_CASE
-      const envKey = key.replace(/([A-Z])/g, '_$1').toUpperCase();
-      const fullEnvKey = `VITE_${envKey}`;
-      
-      if (value && value.trim() !== '') {
-        sessionStorage.setItem(fullEnvKey, value.trim());
-        console.log(`💾 Saved ${fullEnvKey}:`, value.trim());
-      } else {
-        // Remove empty values
-        sessionStorage.removeItem(fullEnvKey);
+    // Store settings in sessionStorage so they persist during the session
+    const configToStore = {
+      VITE_AGORA_APP_ID: settings.agoraAppId,
+      VITE_AGORA_TOKEN: settings.agoraToken,
+      VITE_AGORA_CHANNEL: settings.agoraChannel,
+      VITE_RESTFUL_API_KEY: settings.restfulApiKey,
+      VITE_RESTFUL_PASSWORD: settings.restfulPassword,
+      VITE_CONVOAI_AGENT_NAME: settings.convoaiAgentName,
+      VITE_CONVOAI_AGENT_UID: settings.convoaiAgentUid,
+      VITE_CONVOAI_API_BASE_URL: settings.convoaiApiBaseUrl,
+      VITE_LLM_URL: settings.llmUrl,
+      VITE_LLM_API_KEY: settings.llmApiKey,
+      VITE_LLM_MODEL: settings.llmModel,
+      VITE_LLM_SYSTEM_MESSAGE: settings.llmSystemMessage,
+      VITE_LLM_GREETING: settings.llmGreeting,
+      VITE_TTS_API_KEY: settings.ttsApiKey,
+      VITE_TTS_REGION: settings.ttsRegion,
+      VITE_TTS_VOICE_NAME: settings.ttsVoiceName,
+      VITE_ASR_LANGUAGE: settings.asrLanguage,
+    };
+
+    // Store in sessionStorage
+    Object.entries(configToStore).forEach(([key, value]) => {
+      if (value) {
+        sessionStorage.setItem(key, value);
       }
     });
 
@@ -117,6 +123,7 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
       agoraToken: '',
       agoraChannel: 'AgoraAgent_Channel',
       convoaiApiBaseUrl: 'https://api.agora.io/api/conversational-ai-agent/v2',
+      authCode: '',
       restfulApiKey: '',
       restfulPassword: '',
       convoaiAgentName: 'Agora Agent',
@@ -125,7 +132,7 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
       llmApiKey: '',
       llmModel: 'gpt-4o-mini',
       llmSystemMessage: 'You are a friendly Agora agent assistant.',
-      llmGreeting: "Hello! I'm your Agora agent. How can I help you today?",
+      llmGreeting: "Hello! I am your Agora agent. How can I help you today?",
       ttsApiKey: '',
       ttsRegion: 'eastus',
       ttsVoiceName: 'en-US-AriaNeural',
@@ -135,19 +142,21 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
 
   if (!isOpen) return null;
 
-  const tabs = [
-    { id: 'agora', label: '🎯 Agora', icon: '🎯' },
-    { id: 'convoai', label: '🤖 ConvoAI', icon: '🤖' },
-    { id: 'llm', label: '🧠 LLM', icon: '🧠' },
-    { id: 'tts', label: '🔊 TTS', icon: '🔊' },
-    { id: 'asr', label: '🎙️ ASR', icon: '🎙️' },
-    { id: 'playfab', label: '🎮 PlayFab', icon: '🎮' }
-  ];
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+          <h2 className="text-2xl font-bold text-gray-800">Configuration Settings</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
+          >
+            ×
+          </button>
+        </div>
 
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'agora':
-        return (
+        <div className="p-6 space-y-8">
+          {/* Agora Configuration */}
           <div className="border rounded-lg p-4 bg-blue-50">
             <h3 className="text-lg font-semibold text-blue-800 mb-4">🎯 Agora Configuration</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -189,10 +198,8 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
               </div>
             </div>
           </div>
-        );
 
-      case 'convoai':
-        return (
+          {/* ConvoAI REST API Configuration */}
           <div className="border rounded-lg p-4 bg-green-50">
             <h3 className="text-lg font-semibold text-green-800 mb-4">🤖 ConvoAI REST API</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -253,7 +260,7 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
                   Agent UID
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={settings.convoaiAgentUid}
                   onChange={(e) => handleInputChange('convoaiAgentUid', e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
@@ -262,48 +269,52 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
               </div>
             </div>
           </div>
-        );
 
-      case 'llm':
-        return (
-          <div className="border rounded-lg p-4 bg-indigo-50">
-            <h3 className="text-lg font-semibold text-indigo-800 mb-4">🧠 Large Language Model (LLM)</h3>
+          {/* LLM Configuration */}
+          <div className="border rounded-lg p-4 bg-purple-50">
+            <h3 className="text-lg font-semibold text-purple-800 mb-4">🧠 LLM Settings</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  LLM URL *
+                  LLM API URL *
                 </label>
                 <input
                   type="url"
                   value={settings.llmUrl}
                   onChange={(e) => handleInputChange('llmUrl', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="https://api.openai.com/v1/chat/completions"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  The endpoint URL for your LLM service (e.g., OpenAI, Azure OpenAI, etc.)
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  API Key *
+                  OpenAI API Key *
                 </label>
                 <input
                   type="password"
                   value={settings.llmApiKey}
                   onChange={(e) => handleInputChange('llmApiKey', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="Your LLM API Key"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="sk-..."
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Model
                 </label>
-                <input
-                  type="text"
+                <select
                   value={settings.llmModel}
                   onChange={(e) => handleInputChange('llmModel', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="gpt-4o-mini"
-                />
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                >
+                  <option value="gpt-4o-mini">GPT-4o Mini</option>
+                  <option value="gpt-4o">GPT-4o</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </select>
               </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -313,7 +324,7 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
                   value={settings.llmSystemMessage}
                   onChange={(e) => handleInputChange('llmSystemMessage', e.target.value)}
                   rows={2}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="You are a friendly Agora agent assistant."
                 />
               </div>
@@ -325,74 +336,67 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
                   value={settings.llmGreeting}
                   onChange={(e) => handleInputChange('llmGreeting', e.target.value)}
                   rows={2}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="Hello! I'm your Agora agent. How can I help you today?"
                 />
               </div>
             </div>
           </div>
-        );
 
-      case 'tts':
-        return (
-          <div className="border rounded-lg p-4 bg-yellow-50">
-            <h3 className="text-lg font-semibold text-yellow-800 mb-4">🔊 Text-to-Speech (TTS)</h3>
+          {/* TTS Configuration */}
+          <div className="border rounded-lg p-4 bg-orange-50">
+            <h3 className="text-lg font-semibold text-orange-800 mb-4">🎤 Text-to-Speech (TTS)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  TTS API Key *
+                  Azure TTS API Key *
                 </label>
                 <input
                   type="password"
                   value={settings.ttsApiKey}
                   onChange={(e) => handleInputChange('ttsApiKey', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                  placeholder="Your Azure Speech API Key"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="Your Azure TTS API Key"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Azure Region
+                  Region
                 </label>
-                <input
-                  type="text"
+                <select
                   value={settings.ttsRegion}
                   onChange={(e) => handleInputChange('ttsRegion', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                  placeholder="eastus"
-                />
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                >
+                  <option value="eastus">East US</option>
+                  <option value="westus">West US</option>
+                  <option value="eastus2">East US 2</option>
+                  <option value="westus2">West US 2</option>
+                  <option value="centralus">Central US</option>
+                  <option value="northeurope">North Europe</option>
+                  <option value="westeurope">West Europe</option>
+                </select>
               </div>
-              <div className="md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Voice Name
                 </label>
                 <select
                   value={settings.ttsVoiceName}
                   onChange={(e) => handleInputChange('ttsVoiceName', e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 >
-                  <option value="en-US-AriaNeural">Aria (Female, US English)</option>
-                  <option value="en-US-DavisNeural">Davis (Male, US English)</option>
-                  <option value="en-US-ElizabethNeural">Elizabeth (Female, US English)</option>
-                  <option value="en-US-GuyNeural">Guy (Male, US English)</option>
-                  <option value="en-US-JennyNeural">Jenny (Female, US English)</option>
-                  <option value="en-US-MichelleNeural">Michelle (Female, US English)</option>
-                  <option value="en-GB-SoniaNeural">Sonia (Female, UK English)</option>
-                  <option value="en-GB-RyanNeural">Ryan (Male, UK English)</option>
+                  <option value="en-US-AriaNeural">Aria (English US, Female)</option>
+                  <option value="en-US-JennyNeural">Jenny (English US, Female)</option>
+                  <option value="en-US-GuyNeural">Guy (English US, Male)</option>
+                  <option value="en-US-DavisNeural">Davis (English US, Male)</option>
+                  <option value="en-GB-SoniaNeural">Sonia (English UK, Female)</option>
+                  <option value="en-GB-RyanNeural">Ryan (English UK, Male)</option>
                 </select>
               </div>
-            </div>
-          </div>
-        );
-
-      case 'asr':
-        return (
-          <div className="border rounded-lg p-4 bg-orange-50">
-            <h3 className="text-lg font-semibold text-orange-800 mb-4">🎙️ Automatic Speech Recognition (ASR)</h3>
-            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Language
+                  ASR Language
                 </label>
                 <select
                   value={settings.asrLanguage}
@@ -411,90 +415,41 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
               </div>
             </div>
           </div>
-        );
-
-      case 'playfab':
-        return <PlayFabAuth />;
-
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
-          <h2 className="text-2xl font-bold text-gray-800">Configuration Settings</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-2xl font-bold"
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="bg-gray-50 border-b px-6 py-2">
-          <div className="flex space-x-1 overflow-x-auto">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {renderTabContent()}
         </div>
 
         {/* Footer Actions */}
-        {activeTab !== 'playfab' && (
-          <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-between">
+        <div className="sticky bottom-0 bg-gray-50 border-t px-6 py-4 flex justify-between">
+          <button
+            onClick={handleReset}
+            className="px-4 py-2 text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
+          >
+            Reset to Defaults
+          </button>
+          <div className="space-x-3">
             <button
-              onClick={handleReset}
+              onClick={onClose}
               className="px-4 py-2 text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
             >
-              Reset to Defaults
+              Cancel
             </button>
-            <div className="space-x-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-gray-600 bg-gray-200 rounded-md hover:bg-gray-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                Save Settings
-              </button>
-            </div>
+            <button
+              onClick={handleSave}
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Save Settings
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Help Text */}
-        {activeTab !== 'playfab' && (
-          <div className="px-6 pb-4 text-sm text-gray-600">
-            <p className="mb-2">
-              <strong>Note:</strong> Settings are saved in your browser session and will persist until you refresh the page or close the browser.
-            </p>
-            <p>
-              Fields marked with <span className="text-red-500">*</span> are required for the application to function properly.
-            </p>
-          </div>
-        )}
+        <div className="px-6 pb-4 text-sm text-gray-600">
+          <p className="mb-2">
+            <strong>Note:</strong> Settings are saved in your browser session and will persist until you refresh the page or close the browser.
+          </p>
+          <p>
+            Fields marked with <span className="text-red-500">*</span> are required for the application to function properly.
+          </p>
+        </div>
       </div>
     </div>
   );

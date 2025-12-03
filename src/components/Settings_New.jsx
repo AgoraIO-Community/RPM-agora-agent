@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import PlayFabAuth from './PlayFabAuth';
 
-const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
-  const [activeTab, setActiveTab] = useState(initialTab);
+const Settings = ({ isOpen, onClose }) => {
+  const [activeTab, setActiveTab] = useState('agora');
   const [settings, setSettings] = useState({
     // Agora Configuration
     agoraAppId: '',
@@ -32,7 +32,7 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
     asrLanguage: '',
   });
 
-  // Load settings from environment variables when component opens
+  // Load current environment variables when component mounts
   useEffect(() => {
     if (isOpen) {
       setSettings({
@@ -65,13 +65,6 @@ const Settings = ({ isOpen, onClose, initialTab = 'agora' }) => {
       });
     }
   }, [isOpen]);
-
-  // Update active tab when initialTab prop changes
-  useEffect(() => {
-    if (isOpen && initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [isOpen, initialTab]);
 
   const handleInputChange = (key, value) => {
     setSettings(prev => ({

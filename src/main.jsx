@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ChatProvider } from "./hooks/useChat";
 import { AgoraProvider } from "./hooks/useAgora";
+import { PlayFabProvider } from "./hooks/usePlayFab";
 import "./index.css";
 
 // Suppress Three.js PropertyBinding warnings and Agora WebSocket errors
@@ -33,10 +34,12 @@ console.error = function(...args) {
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <AgoraProvider>
-      <ChatProvider>
-        <App />
-      </ChatProvider>
-    </AgoraProvider>
+    <PlayFabProvider>
+      <AgoraProvider>
+        <ChatProvider>
+          <App />
+        </ChatProvider>
+      </AgoraProvider>
+    </PlayFabProvider>
   </React.StrictMode>
 );
