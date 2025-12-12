@@ -118,8 +118,8 @@ For text-to-speech conversion:
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/chitimalli/agora-agent.git
-   cd agora-agent
+   git clone https://github.com/AgoraIO-Community/RPM-agora-agent.git
+   cd RPM-agora-agent
    ```
 
 2. **Install Dependencies**
@@ -896,8 +896,8 @@ Want to build your own AI avatar? Here's how to get started:
 
 1. **Clone the repo**
    ```bash
-   git clone https://github.com/chitimalli/agora-agent.git
-   cd agora-agent
+   git clone https://github.com/AgoraIO-Community/RPM-agora-agent.git
+   cd RPM-agora-agent
    npm install
    ```
 
@@ -966,7 +966,7 @@ git push origin feature/your-feature-name
 - [ReadyPlayer.me Discord](https://discord.gg/readyplayerme)
 - 📧 Email: support@yourproject.com
 - 💬 Discord: [Join our community](https://discord.gg/yourproject)
-- 🐛 Issues: [GitHub Issues](https://github.com/chitimalli/agora-agent/issues)
+- 🐛 Issues: [GitHub Issues](https://github.com/AgoraIO-Community/RPM-agora-agent/issues)
 
 ### Related Projects & Tools
 - [Mixamo Animations](https://www.mixamo.com/) - Free character animations
