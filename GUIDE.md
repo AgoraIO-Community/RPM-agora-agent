@@ -256,153 +256,133 @@ This is where the magic happens. We'll use WebAudio API to analyze the AI agent'
 
 1. **Create the WebAudio analyzer**
 
-   In `src/hooks/useLipSync.jsx`, set up the audio analysis infrastructure:
+   In `src/hooks/useAgora.jsx`, when we subscribe to the remote audio track, we set up WebAudio analysis:
 
    ```javascript
-   import { useRef, useEffect } from 'react';
-
-   export const useLipSync = () => {
-     // Store WebAudio components
-     const audioContextRef = useRef(null);
-     const analyzerRef = useRef(null);
-     const dataArrayRef = useRef(null);
-
-     const setupLipSync = (mediaStreamTrack) => {
-       // Create AudioContext (browser's audio processing engine)
-       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-       audioContextRef.current = audioContext;
-
-       // Create an AnalyserNode for frequency analysis
-       const analyzer = audioContext.createAnalyser();
-       
-       // FFT size determines frequency resolution
-       // 1024 gives us good balance between accuracy and performance
-       analyzer.fftSize = 1024;
-       
-       // Smooth transitions between frames (0 = no smoothing, 1 = maximum)
-       analyzer.smoothingTimeConstant = 0.3;
-       
-       analyzerRef.current = analyzer;
-
-       // Create array to hold frequency data
-       // frequencyBinCount is half of fftSize
-       const bufferLength = analyzer.frequencyBinCount;
-       const dataArray = new Uint8Array(bufferLength);
-       dataArrayRef.current = dataArray;
-
-       // Convert MediaStreamTrack to MediaStream
-       const stream = new MediaStream([mediaStreamTrack]);
-       
-       // Create source from the stream
-       const source = audioContext.createMediaStreamSource(stream);
-       
-       // Connect source to analyzer
-       source.connect(analyzer);
-       
-       console.log("Lip sync initialized with FFT size:", analyzer.fftSize);
-     };
-
-     return { setupLipSync };
-   };
+   // Inside the user-published event handler
+   const mediaStreamTrack = audioTrack.getMediaStreamTrack();
+   
+   // Create AudioContext (browser's audio processing engine)
+   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+   
+   // Resume audio context if suspended (common on mobile/browser restrictions)
+   if (audioContext.state === 'suspended') {
+     console.log('🔄 Resuming suspended audio context...');
+     await audioContext.resume();
+   }
+   
+   // Create MediaStream source from the remote audio track
+   const mediaStreamSource = audioContext.createMediaStreamSource(
+     new MediaStream([mediaStreamTrack])
+   );
+   
+   // Create AnalyserNode for frequency analysis
+   const analyser = audioContext.createAnalyser();
+   
+   // Connect source to analyzer
+   mediaStreamSource.connect(analyser);
+   
+   // FFT size of 256 gives us 128 frequency bins
+   // This balances resolution and performance for real-time speech
+   analyser.fftSize = 256;
+   
+   // Store reference for the analysis loop
+   audioAnalyserRef.current = analyser;
+   
+   console.log('🔊 Real-time audio analysis setup complete');
    ```
 
-2. **Analyze speech frequencies**
+2. **Analyze speech frequencies in real-time**
 
-   Add a function to extract audio levels from the speech frequency range:
+   Start a continuous analysis loop using requestAnimationFrame:
 
    ```javascript
-   const getAudioLevel = () => {
-     if (!analyzerRef.current || !dataArrayRef.current) {
-       return 0;  // No audio if not initialized
+   // Real-time audio analysis loop
+   const analyzeAudio = () => {
+     if (audioAnalyserRef.current) {
+       // Create array to hold frequency data (128 bins from fftSize 256)
+       const dataArray = new Uint8Array(audioAnalyserRef.current.frequencyBinCount);
+       
+       // Get current frequency data (0-255 values for each bin)
+       audioAnalyserRef.current.getByteFrequencyData(dataArray);
+       
+       // Calculate average audio level (0-1 normalized)
+       const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+       const normalizedLevel = average / 255;
+       
+       setAudioLevel(normalizedLevel);
+       
+       // Continue the loop at ~60 FPS
+       animationFrameRef.current = requestAnimationFrame(analyzeAudio);
      }
-
-     const analyzer = analyzerRef.current;
-     const dataArray = dataArrayRef.current;
-
-     // Get current frequency data
-     // This fills dataArray with values 0-255 for each frequency bin
-     analyzer.getByteFrequencyData(dataArray);
-
-     // Human speech primarily lives in 85-255 Hz
-     // With fftSize=1024 and 44.1kHz sample rate:
-     // - Each bin represents ~43 Hz
-     // - Bin 2-6 covers our speech range
-     const speechRange = dataArray.slice(2, 6);
-
-     // Calculate average amplitude in speech range
-     const sum = speechRange.reduce((a, b) => a + b, 0);
-     const average = sum / speechRange.length;
-
-     // Normalize to 0-1 range
-     return average / 255;
    };
+   
+   // Start the analysis loop
+   analyzeAudio();
    ```
 
 3. **Map frequencies to visemes**
 
-   Create the mapping from audio characteristics to mouth shapes:
+   Inside the analysis loop, detect visemes based on frequency characteristics:
 
    ```javascript
-   const calculateViseme = (audioLevel) => {
-     if (audioLevel < 0.01) {
-       // Silence - neutral mouth position
-       return { viseme: 'neutral', weight: 0 };
-     }
-
-     // Get more detailed frequency data for viseme detection
-     const analyzer = analyzerRef.current;
-     const dataArray = dataArrayRef.current;
-     analyzer.getByteFrequencyData(dataArray);
-
-     // Analyze different frequency ranges to determine phoneme
-     const lowFreq = dataArray.slice(2, 4);    // 85-170 Hz - O, U sounds
-     const midFreq = dataArray.slice(4, 5);    // 170-213 Hz - A sounds  
-     const highFreq = dataArray.slice(5, 6);   // 213-255 Hz - E, I sounds
-
-     const lowAvg = lowFreq.reduce((a,b) => a+b) / lowFreq.length / 255;
-     const midAvg = midFreq.reduce((a,b) => a+b) / midFreq.length / 255;
-     const highAvg = highFreq.reduce((a,b) => a+b) / highFreq.length / 255;
-
-     // Determine dominant frequency range
-     let viseme = 'viseme_aa';  // Default to neutral vowel
-     let weight = audioLevel;
-
-     if (lowAvg > midAvg && lowAvg > highAvg) {
-       // Low frequencies dominant - round vowels
-       viseme = audioLevel > 0.3 ? 'viseme_O' : 'viseme_U';
-     } else if (highAvg > midAvg && highAvg > lowAvg) {
-       // High frequencies dominant - close vowels
-       viseme = audioLevel > 0.3 ? 'viseme_I' : 'viseme_E';
-     } else {
-       // Mid frequencies - open vowels
-       viseme = 'viseme_aa';
-     }
-
-     return { viseme, weight: Math.min(weight * 1.5, 1.0) };
-   };
-   ```
-
-4. **Export the analysis function**
-
-   Make the audio level and viseme data available to our Avatar component:
-
-   ```javascript
-   return {
-     setupLipSync,
-     getAudioLevel,
-     calculateViseme,
-     stopLipSync: () => {
-       if (audioContextRef.current) {
-         audioContextRef.current.close();
-         audioContextRef.current = null;
-         analyzerRef.current = null;
-         dataArrayRef.current = null;
+   // Initialize lip sync data
+   let viseme = 'X'; // Default closed mouth
+   let mouthOpen = 0;
+   let mouthSmile = 0;
+   
+   if (normalizedLevel > 0.01) {
+     // Analyze frequency ranges for realistic viseme detection
+     // With fftSize=256 and ~44.1kHz sample rate, each bin ≈ 172 Hz
+     const lowFreq = dataArray.slice(0, 15).reduce((sum, val) => sum + val, 0) / 15;   // 0-2.5kHz
+     const midFreq = dataArray.slice(15, 60).reduce((sum, val) => sum + val, 0) / 45;  // 2.5-10kHz  
+     const highFreq = dataArray.slice(60, 100).reduce((sum, val) => sum + val, 0) / 40; // 10-17kHz
+     
+     // Enhanced viseme detection based on frequency dominance
+     if (normalizedLevel > 0.15) {
+       if (highFreq > midFreq && highFreq > lowFreq) {
+         // High frequency dominant - 'ee', 'ih', 's', 'sh' sounds
+         viseme = Math.random() > 0.5 ? 'C' : 'H'; // viseme_I or viseme_TH
+       } else if (lowFreq > midFreq && lowFreq > highFreq) {
+         // Low frequency dominant - 'oh', 'oo', 'ow' sounds
+         viseme = Math.random() > 0.5 ? 'E' : 'F'; // viseme_O or viseme_U
+       } else if (midFreq > 20) {
+         // Mid frequency dominant - 'ah', 'ay', 'eh' sounds
+         viseme = Math.random() > 0.5 ? 'D' : 'A'; // viseme_AA or viseme_PP
+       } else {
+         // Consonants - 'p', 'b', 'm', 'k', 'g'
+         viseme = Math.random() > 0.5 ? 'B' : 'G'; // viseme_kk or viseme_FF
        }
+     } else if (normalizedLevel > 0.05) {
+       // Lower volume speech
+       viseme = 'A'; // viseme_PP for general speech
      }
-   };
+     
+     // Calculate mouth movements with natural variation
+     mouthOpen = Math.min(normalizedLevel * 2.5, 1); // Amplify for visibility
+     mouthSmile = normalizedLevel * 0.15; // Subtle smile during speech
+   }
+   
+   // Generate comprehensive lip sync data
+   setLipSyncData({
+     viseme: viseme,
+     mouthOpen: mouthOpen,
+     mouthSmile: mouthSmile,
+     jawOpen: mouthOpen * 0.7, // Jaw follows mouth but less pronounced
+     audioLevel: normalizedLevel,
+     frequencies: { low: lowFreq, mid: midFreq, high: highFreq }
+   });
    ```
 
-Now we have a working lip sync engine that analyzes audio and determines what mouth shape should be displayed. Next, we'll connect this to the 3D avatar to actually see the results.
+The complete lip sync data object now contains:
+   - `viseme`: Letter code (A-X) representing the current phoneme
+   - `mouthOpen`: 0-1 value for jaw opening
+   - `mouthSmile`: Subtle smile during speech
+   - `jawOpen`: Jaw movement (70% of mouth open)
+   - `audioLevel`: Overall volume level
+   - `frequencies`: Raw frequency data for debugging
+
+This data updates at ~60 FPS via requestAnimationFrame, providing smooth real-time lip sync. Next, we'll connect this to the 3D avatar to visualize the results.
 
 ### Integrate Avatar and Apply Morph Targets
 
@@ -410,229 +390,243 @@ Now we connect our audio analysis to the 3D avatar's facial blend shapes.
 
 1. **Load the ReadyPlayer.me avatar**
 
-   In `src/components/Avatar.jsx`, load the 3D model with morph targets:
+   In `src/components/Avatar.jsx`, we load the 3D model and get lip sync data from Agora:
 
    ```javascript
    import { useGLTF } from '@react-three/drei';
    import { useFrame } from '@react-three/fiber';
-   import { useRef, useEffect } from 'react';
+   import { useRef } from 'react';
+   import { useAgora } from '../hooks/useAgora';
 
-   export function Avatar({ currentAvatar, lipSyncData }) {
-     // Load the GLB file from ReadyPlayer.me
-     const { scene, nodes } = useGLTF(`/models/Avatars/${currentAvatar}.glb`);
-     
-     // Reference to the head mesh (contains morph targets)
-     const headRef = useRef();
-
-     useEffect(() => {
-       if (nodes.Wolf3D_Head) {
-         headRef.current = nodes.Wolf3D_Head;
-         
-         // Log available morph targets for debugging
-         console.log('Available morph targets:', 
-           Object.keys(nodes.Wolf3D_Head.morphTargetDictionary)
-         );
-       }
-     }, [nodes]);
-
-     // Render the avatar
-     return (
-       <primitive object={scene} scale={1.5} position={[0, -1.5, 0]} />
-     );
-   }
-   ```
-
-2. **Apply lip sync to morph targets**
-
-   Update the morph target influences based on audio analysis:
-
-   ```javascript
-   useFrame(() => {
-     if (!headRef.current || !lipSyncData) return;
-
-     const { viseme, weight } = lipSyncData;
-     const morphTargetInfluences = headRef.current.morphTargetInfluences;
-     const morphTargetDictionary = headRef.current.morphTargetDictionary;
-
-     // Get the index for the current viseme
-     const visemeIndex = morphTargetDictionary[viseme];
-     
-     if (visemeIndex === undefined) return;
-
-     // Smooth interpolation (lerp) from current value to target
-     // This creates natural transitions between mouth shapes
-     const current = morphTargetInfluences[visemeIndex] || 0;
-     const target = weight;
-     const lerpFactor = 0.3;  // Smoothing speed (0-1)
-
-     // Apply the interpolated value
-     morphTargetInfluences[visemeIndex] = 
-       current + (target - current) * lerpFactor;
-
-     // Gradually return other visemes to neutral
-     for (let i = 0; i < morphTargetInfluences.length; i++) {
-       if (i !== visemeIndex && morphTargetInfluences[i] > 0) {
-         // Decay to 0
-         morphTargetInfluences[i] *= 0.7;
-       }
-     }
-   });
-   ```
-
-3. **Add facial expressions**
-
-   Implement expression controls that work alongside lip sync:
-
-   ```javascript
-   const [expression, setExpression] = useState('default');
-
-   // Expression presets using ARKit blend shapes
-   const expressions = {
-     default: {},
-     smile: {
-       mouthSmile: 0.8,
-       eyeSquintLeft: 0.2,
-       eyeSquintRight: 0.2
-     },
-     surprised: {
-       browInnerUp: 0.9,
-       eyeWideLeft: 0.8,
-       eyeWideRight: 0.8,
-       jawOpen: 0.3
-     },
-     sad: {
-       mouthFrownLeft: 0.6,
-       mouthFrownRight: 0.6,
-       browInnerUp: 0.3
-     }
-   };
-
-   // Apply expression to morph targets
-   const applyExpression = (expressionName) => {
-     if (!headRef.current) return;
-
-     const morphTargetInfluences = headRef.current.morphTargetInfluences;
-     const morphTargetDictionary = headRef.current.morphTargetDictionary;
-     const targetExpression = expressions[expressionName] || {};
-
-     // Apply each blend shape in the expression
-     Object.entries(targetExpression).forEach(([shapeName, targetValue]) => {
-       const shapeIndex = morphTargetDictionary[shapeName];
-       if (shapeIndex !== undefined) {
-         morphTargetInfluences[shapeIndex] = targetValue;
-       }
-     });
-   };
-
-   // Apply expression when it changes
-   useEffect(() => {
-     applyExpression(expression);
-   }, [expression]);
-   ```
-
-4. **Combine lip sync and expressions**
-
-   Ensure lip sync movements add to expressions rather than replacing them:
-
-   ```javascript
-   useFrame(() => {
-     if (!headRef.current || !lipSyncData) return;
-
-     const { viseme, weight } = lipSyncData;
-     const morphTargetInfluences = headRef.current.morphTargetInfluences;
-     const morphTargetDictionary = headRef.current.morphTargetDictionary;
-
-     const visemeIndex = morphTargetDictionary[viseme];
-     if (visemeIndex === undefined) return;
-
-     // Get current expression value for this blend shape
-     const expressionValue = morphTargetInfluences[visemeIndex] || 0;
-
-     // Calculate lip sync value with smoothing
-     const current = morphTargetInfluences[visemeIndex] || 0;
-     const lipSyncTarget = weight;
-     const lipSyncValue = current + (lipSyncTarget - current) * 0.3;
-
-     // CRITICAL: Use Math.max() to additively blend
-     // This ensures lip sync doesn't reduce expression intensity
-     morphTargetInfluences[visemeIndex] = Math.max(expressionValue, lipSyncValue);
-
-     // Decay other visemes that aren't part of current expression
-     for (let i = 0; i < morphTargetInfluences.length; i++) {
-       if (i !== visemeIndex) {
-         const isPartOfExpression = Object.keys(expressions[expression] || {})
-           .some(key => morphTargetDictionary[key] === i);
-         
-         if (!isPartOfExpression && morphTargetInfluences[i] > 0) {
-           morphTargetInfluences[i] *= 0.7;
-         }
-       }
-     }
-   });
-   ```
-
-5. **Connect to ConvoAI state**
-
-   In your main `App.jsx`, wire everything together:
-
-   ```javascript
-   import { Avatar } from './components/Avatar';
-   import { useAgora } from './hooks/useAgora';
-   import { useLipSync } from './hooks/useLipSync';
-   import { useState } from 'react';
-   import { Canvas } from '@react-three/fiber';
-
-   function App() {
-     const { joinChannel, leaveChannel } = useAgora();
-     const { setupLipSync, calculateViseme, getAudioLevel } = useLipSync();
-     const [lipSyncData, setLipSyncData] = useState(null);
-     const [isConnected, setIsConnected] = useState(false);
-
-     // Update lip sync data in animation loop
-     useEffect(() => {
-       if (!isConnected) return;
-
-       const interval = setInterval(() => {
-         const audioLevel = getAudioLevel();
-         const visemeData = calculateViseme(audioLevel);
-         setLipSyncData(visemeData);
-       }, 16);  // ~60 FPS
-
-       return () => clearInterval(interval);
-     }, [isConnected]);
-
-     const handleConnect = async () => {
-       await joinChannel(appId, token, channelName);
-       setIsConnected(true);
+   export function Avatar({ currentExpression, currentAnimation, currentAvatar = "Aurora" }) {
+     // Define available avatars
+     const availableAvatars = {
+       Aurora: "Aurora.glb",
+       Celeste: "Celeste.glb", 
+       Lyra: "Lyra.glb"
      };
 
-     return (
-       <div className="app">
-         <Canvas camera={{ position: [0, 0, 3], fov: 50 }}>
-           <Avatar 
-             currentAvatar="Aurora" 
-             lipSyncData={lipSyncData}
-           />
-           <ambientLight intensity={0.5} />
-           <directionalLight position={[5, 5, 5]} intensity={1} />
-         </Canvas>
-         
-         <button onClick={handleConnect}>
-           {isConnected ? 'Connected' : 'Connect'}
-         </button>
-       </div>
+     // Load the selected avatar GLB file
+     const avatarModel = availableAvatars[currentAvatar] || availableAvatars.Aurora;
+     const { nodes, materials, scene } = useGLTF(
+       `${import.meta.env.BASE_URL}models/Avatars/${avatarModel}`
      );
-   }
+
+     // Get real-time lip sync data from WebAudio analysis in useAgora
+     const { lipSyncData, audioLevel } = useAgora();
+     
+     // Smoothing states for natural transitions
+     const smoothedAudioLevel = useRef(0);
+     const lastViseme = useRef('X');
+     const visemeTransition = useRef(0);
+
+     // Viseme letter codes to ARKit blend shape names mapping
+     const corresponding = {
+       A: "viseme_PP",
+       B: "viseme_kk",
+       C: "viseme_I",
+       D: "viseme_AA",
+       E: "viseme_O",
+       F: "viseme_U",
+       G: "viseme_FF",
+       H: "viseme_TH",
+       X: "viseme_PP", // Silence/default
+     };
+     
+     // Enhanced mouth morph targets for each phoneme
+     const mouthMorphTargets = {
+       A: { jawOpen: 0.7, mouthOpen: 0.8, mouthWide: 0.5 },
+       E: { jawOpen: 0.4, mouthOpen: 0.6, mouthWide: 0.7, mouthSmileLeft: 0.3, mouthSmileRight: 0.3 },
+       I: { jawOpen: 0.2, mouthOpen: 0.3, mouthWide: 0.8, mouthSmileLeft: 0.5, mouthSmileRight: 0.5 },
+       O: { jawOpen: 0.5, mouthOpen: 0.7, mouthFunnel: 0.6, mouthPucker: 0.4 },
+       U: { jawOpen: 0.3, mouthOpen: 0.4, mouthFunnel: 0.8, mouthPucker: 0.7 },
+       B: { mouthPressLeft: 0.8, mouthPressRight: 0.8, mouthClose: 0.9 },
+       C: { jawOpen: 0.2, mouthOpen: 0.3 },
+       D: { jawOpen: 0.3, mouthOpen: 0.4, tongueOut: 0.2 },
+       F: { jawOpen: 0.1, mouthOpen: 0.2, mouthFunnel: 0.3 },
+       G: { jawOpen: 0.4, mouthOpen: 0.5 },
+       H: { jawOpen: 0.3, mouthOpen: 0.4 },
+       X: { jawOpen: 0.05, mouthOpen: 0.1 }
+     };
    ```
 
-You now have a complete system that:
-- Connects to Agora RTC and receives AI agent audio
-- Analyzes audio frequencies with WebAudio API
-- Maps frequencies to visemes
-- Updates avatar morph targets at 60 FPS
-- Blends lip sync with facial expressions
+2. **Apply lip sync to morph targets in real-time**
 
-The complete implementation is in the GitHub repository at [github.com/AgoraIO-Community/RPM-agora-agent](https://github.com/AgoraIO-Community/RPM-agora-agent).
+   Use React Three Fiber's `useFrame` to update morph targets every frame:
+
+   ```javascript
+   // Helper to get the head mesh containing morph targets
+   const getMorphTargetMesh = () => {
+     return nodes.Wolf3D_Head || nodes.EyeLeft; // Different avatars may vary
+   };
+
+   // Smooth interpolation helper
+   const lerpMorphTarget = (target, value, speed) => {
+     const mesh = getMorphTargetMesh();
+     if (!mesh?.morphTargetDictionary) return;
+     
+     const index = mesh.morphTargetDictionary[target];
+     if (index === undefined) return;
+     
+     const current = mesh.morphTargetInfluences[index];
+     mesh.morphTargetInfluences[index] = THREE.MathUtils.lerp(
+       current,
+       value,
+       speed
+     );
+   };
+
+   // Main animation loop - runs every frame (~60 FPS)
+   useFrame((state, deltaTime) => {
+     // Smooth the audio level to reduce jitter
+     const targetAudioLevel = audioLevel || 0;
+     smoothedAudioLevel.current = THREE.MathUtils.lerp(
+       smoothedAudioLevel.current,
+       targetAudioLevel,
+       1 - Math.exp(-15 * deltaTime) // Exponential smoothing
+     );
+
+     const appliedMorphTargets = [];
+     
+     // Apply WebAudio lip sync data if available and audio is active
+     if (lipSyncData?.viseme && smoothedAudioLevel.current > 0.01) {
+       const currentViseme = lipSyncData.viseme;
+       const visemeTarget = corresponding[currentViseme];
+       const mouthShape = mouthMorphTargets[currentViseme];
+       
+       // Handle smooth viseme transitions
+       if (lastViseme.current !== currentViseme) {
+         visemeTransition.current = 0;
+         lastViseme.current = currentViseme;
+       }
+       visemeTransition.current = Math.min(
+         visemeTransition.current + deltaTime * 12,
+         1
+       );
+       
+       // Apply ARKit viseme blend shape
+       if (visemeTarget) {
+         appliedMorphTargets.push(visemeTarget);
+         const intensity = Math.min(smoothedAudioLevel.current * 2.0, 1.0) * 
+                          visemeTransition.current;
+         lerpMorphTarget(visemeTarget, intensity, 0.8);
+       }
+       
+       // Apply enhanced mouth shapes
+       if (mouthShape) {
+         Object.entries(mouthShape).forEach(([morphTarget, value]) => {
+           const smoothedIntensity = value * smoothedAudioLevel.current * 4 * 
+                                     visemeTransition.current;
+           const clampedIntensity = Math.min(smoothedIntensity, value * 1.2);
+           lerpMorphTarget(morphTarget, clampedIntensity, 0.5);
+           appliedMorphTargets.push(morphTarget);
+         });
+       }
+       
+       // Add natural jaw movement with breathing variation
+       const breathingVariation = Math.sin(state.clock.elapsedTime * 2) * 0.1;
+       const baseJawOpen = (mouthShape?.jawOpen || 0.3) + breathingVariation;
+       const jawIntensity = baseJawOpen * smoothedAudioLevel.current * 3.0 * 
+                           visemeTransition.current;
+       lerpMorphTarget("jawOpen", Math.min(jawIntensity, 1.0), 0.5);
+       
+       appliedMorphTargets.push("jawOpen");
+     }
+     
+     // Reset unused morph targets smoothly
+     Object.values(corresponding).forEach((viseme) => {
+       if (!appliedMorphTargets.includes(viseme)) {
+         lerpMorphTarget(viseme, 0, 0.2);
+       }
+     });
+     
+     // Gentle reset to slightly open mouth when silent
+     if (!lipSyncData || smoothedAudioLevel.current <= 0.01) {
+       lerpMorphTarget("jawOpen", 0.02, 0.5);
+       lerpMorphTarget("mouthOpen", 0.01, 0.5);
+     }
+   });
+   ```
+
+3. **Add facial expressions that blend with lip sync**
+
+   Define expression presets using ARKit blend shapes:
+
+   ```javascript
+   const facialExpressions = {
+     default: {},
+     smile: {
+       browInnerUp: 0.15,
+       eyeSquintLeft: 0.3,
+       eyeSquintRight: 0.3,
+       mouthSmileLeft: 0.8,
+       mouthSmileRight: 0.8,
+       cheekSquintLeft: 0.4,
+       cheekSquintRight: 0.4,
+     },
+     surprised: {
+       eyeWideLeft: 0.5,
+       eyeWideRight: 0.5,
+       jawOpen: 0.351,
+       mouthFunnel: 1,
+       browInnerUp: 1,
+     },
+     sad: {
+       mouthFrownLeft: 1,
+       mouthFrownRight: 1,
+       mouthShrugLower: 0.78,
+       browInnerUp: 0.45,
+       eyeSquintLeft: 0.72,
+       eyeSquintRight: 0.75,
+     },
+     angry: {
+       browDownLeft: 1,
+       browDownRight: 1,
+       eyeSquintLeft: 1,
+       eyeSquintRight: 1,
+       jawForward: 1,
+       mouthShrugLower: 1,
+       noseSneerLeft: 1,
+     }
+   };
+
+   // Apply expressions in useFrame (before lip sync)
+   useFrame(() => {
+     const morphMesh = getMorphTargetMesh();
+     if (morphMesh?.morphTargetDictionary) {
+       const mapping = facialExpressions[currentExpression || 'default'];
+       
+       Object.keys(morphMesh.morphTargetDictionary).forEach((key) => {
+         // Skip eye blinks - handled separately
+         if (key === "eyeBlinkLeft" || key === "eyeBlinkRight") return;
+         
+         if (mapping?.[key]) {
+           lerpMorphTarget(key, mapping[key], 0.1);
+         } else {
+           lerpMorphTarget(key, 0, 0.1);
+         }
+       });
+     }
+     
+     // ... then apply lip sync (shown in step 2)
+     // Lip sync morph targets are ADDED to expression targets
+     // This allows natural speech on top of any expression
+   });
+   ```
+
+   The key is that expressions are applied FIRST, then lip sync is layered on top. Lip sync only affects mouth-related blend shapes, leaving eyes, brows, and cheeks controlled by expressions.
+   ```
+
+That's it! The complete implementation is in `src/components/Avatar.jsx`. The key takeaways:
+
+- WebAudio analysis happens in `useAgora.jsx` during remote audio subscription
+- Lip sync data flows from `useAgora()` → `Avatar` component → morph targets
+- Expressions and lip sync work together by applying expressions first, then lip sync
+- Smooth interpolation prevents jerky movements (exponential smoothing)
+- Viseme transitions add natural mouth shape changes
+- Intensity multipliers (2x-4x) make movements visible on 3D models
+
+Now we have a complete system that connects to Agora RTC, analyzes AI voice with WebAudio, and renders realistic lip-synced avatars at 60 FPS.
 
 ## Test AI Avatar with Lip Sync
 
