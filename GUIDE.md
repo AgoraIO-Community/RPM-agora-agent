@@ -533,87 +533,133 @@ Imagine the AI saying:
 
 ### How It Will Work
 
-#### 1. Sentiment Analysis Integration
+We'll leverage **Agora's ConvoAI Engine** capabilities to implement emotion-driven expressions without directly calling LLM APIs.
 
-Analyze AI responses for emotional content:
+#### 1. Skip Patterns for Expression Metadata
+
+Use Agora's Skip Patterns feature to embed expression commands in LLM responses that won't be spoken by TTS:
 
 ```javascript
-// Planned implementation
-const analyzeEmotion = async (text) => {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-4',
-      messages: [{
-        role: 'system',
-        content: 'Analyze the emotion of this text and return one of: happy, sad, angry, surprised, neutral, excited'
-      }, {
-        role: 'user',
-        content: text
-      }],
-      temperature: 0.3
-    })
-  });
+// Configure skip patterns to hide expression markers from TTS
+const skipPatterns = [
+  /\[EMOTION:.*?\]/g,  // Skip emotion markers like [EMOTION:happy]
+  /\[EXPR:.*?\]/g      // Skip expression markers like [EXPR:smile]
+];
+
+// Subscribe to ConvoAI messages
+agoraEngine.subscribeMessage((message) => {
+  const { text, userId } = message;
   
-  const data = await response.json();
-  return data.choices[0].message.content.toLowerCase();
-};
+  // Extract emotion markers before TTS processes the text
+  const emotionMatch = text.match(/\[EMOTION:(\w+)\]/);
+  const expressionMatch = text.match(/\[EXPR:(\w+)\]/);
+  
+  if (emotionMatch) {
+    const emotion = emotionMatch[1]; // e.g., "happy", "sad", "excited"
+    setAvatarEmotion(emotion);
+  }
+  
+  if (expressionMatch) {
+    const expression = expressionMatch[1]; // e.g., "smile", "concerned"
+    setFacialExpression(expression);
+  }
+  
+  // Display text in chat (markers already filtered by skip patterns)
+  displayMessage(text);
+});
 ```
 
-#### 2. Emotion-to-Expression Mapping
+#### 2. Custom Context via RTM Presence
 
-Map detected emotions to facial expressions:
+Send user context and avatar state to the LLM using Agora RTM's `context.presence`:
+
+```javascript
+// Transmit custom information to LLM
+const updateUserContext = async (contextData) => {
+  await agoraRTM.presence.setState({
+    channelName: channelName,
+    channelType: 'MESSAGE',
+    state: {
+      // User preferences
+      preferredEmotions: ['happy', 'neutral', 'encouraging'],
+      currentMood: 'focused',
+      
+      // Avatar capabilities
+      supportedExpressions: ['smile', 'sad', 'surprised', 'thinking'],
+      currentExpression: currentExpression,
+      
+      // Interaction context
+      conversationTone: 'professional',
+      taskType: 'tutoring'
+    }
+  });
+};
+
+// LLM receives this context and can tailor responses with appropriate emotion markers
+```
+
+#### 3. Real-time Expression Mapping
+
+Map emotion markers from ConvoAI to avatar expressions:
 
 ```javascript
 const emotionToExpression = {
   happy: 'smile',
   excited: 'smile',
   sad: 'sad',
-  angry: 'angry',
+  concerned: 'sad',
   surprised: 'surprised',
-  neutral: 'default',
-  confused: 'funnyFace'
+  thinking: 'funnyFace',
+  neutral: 'default'
+};
+
+const setAvatarEmotion = (emotion) => {
+  const expression = emotionToExpression[emotion] || 'default';
+  setFacialExpression(expression);
+  
+  // Optionally adjust intensity based on context
+  const intensity = calculateIntensity(emotion);
+  setExpressionWeight(intensity);
 };
 ```
 
-#### 3. Context-Aware Expression Timing
+#### 4. System Prompt Configuration
 
-Synchronize expression changes with speech prosody:
+Configure the LLM via ConvoAI to include emotion markers in responses:
 
 ```javascript
-const scheduleExpressionChanges = (text, emotion) => {
-  // Parse text for emotional markers
-  const markers = detectEmotionalMarkers(text);
-  
-  // Calculate timing based on TTS duration
-  const duration = estimateSpeechDuration(text);
-  
-  // Schedule expression changes
-  markers.forEach((marker, index) => {
-    const timing = (marker.position / text.length) * duration;
-    setTimeout(() => {
-      setFacialExpression(emotionToExpression[marker.emotion]);
-    }, timing);
-  });
-};
+const systemPrompt = `You are a friendly AI assistant with an expressive avatar.
+Include emotion markers in your responses using this format: [EMOTION:type]
+
+Available emotions: happy, sad, excited, surprised, thinking, concerned, neutral
+
+Examples:
+- "I'm so excited to help you! [EMOTION:excited]"
+- "I'm sorry to hear that. [EMOTION:concerned]"
+- "Hmm, let me think about that... [EMOTION:thinking]"
+
+Place the marker at the point where the emotion should be expressed.`;
 ```
 
 #### Implementation Plan
 
-1. **Text Analysis**: Use GPT-4 to detect emotion from AI responses
-2. **Voice Analysis**: Analyze pitch, energy, and speaking rate from audio
-3. **Multi-Modal Fusion**: Combine text (30%) and voice (70%) for accuracy
-4. **Timing**: Parse text for emotional keywords and schedule expression changes
+1. **Configure Skip Patterns**: Set up regex patterns to filter expression markers from TTS
+2. **RTM Integration**: Use `context.presence` to send avatar capabilities and user preferences to LLM
+3. **Message Subscription**: Subscribe to ConvoAI messages and parse emotion markers in real-time
+4. **Expression Mapping**: Map extracted emotions to avatar facial expressions
+5. **System Prompt**: Update LLM system prompt to generate emotion markers
+6. **Voice Analysis** (Optional): Analyze audio energy and pitch from Agora RTC stream for additional emotion cues
 
-```javascript
-// Example: Detect emotion from text and audio
-const emotion = await detectEmotion(aiResponse, audioStream);
-setExpression(emotionToExpression[emotion]);
-```
+**Why Agora ConvoAI Engine?**
+
+Instead of directly integrating with LLM APIs, we leverage Agora's ConvoAI Engine which provides:
+- Unified interface for managing RTC and RTM interactions
+- Built-in skip patterns for filtering metadata from TTS output
+- Context transmission via RTM presence for personalized responses
+- Seamless integration with Agora's voice streaming
+- Evolving features and optimizations from Agora's engineering team
+
+This approach keeps the avatar system modular and takes advantage of Agora's continuously improving conversational AI capabilities.
 
 ### Other Planned Features
 
@@ -775,215 +821,6 @@ viseme_CH, viseme_SS, viseme_nn, viseme_RR
 
 ---
 
-## Performance Optimization Tips
-
-### 1. Audio Analysis Optimization
-
-```javascript
-// Use a larger FFT size for better quality (but slower)
-analyzer.fftSize = 2048; // High quality, lower FPS
-
-// Use smaller FFT for better performance
-analyzer.fftSize = 512; // Lower quality, higher FPS
-
-// Balance between quality and performance
-analyzer.fftSize = 1024; // Recommended
-```
-
-### 2. Morph Target Updates
-
-```javascript
-// Only update morph targets when audio is active
-useFrame(() => {
-  const volume = getAudioLevel();
-  if (volume < 0.01) return; // Skip if silent
-  
-  // Update morph targets
-});
-```
-
-### 3. Expression Caching
-
-```javascript
-const expressionCache = useRef({});
-
-const setFacialExpression = (expression) => {
-  // Return early if same expression
-  if (expressionCache.current === expression) return;
-  expressionCache.current = expression;
-  
-  // Apply expression
-};
-```
-
-### 4. Reduce Render Calls
-
-```javascript
-// Throttle updates to 30 FPS for better performance
-const FRAME_INTERVAL = 1000 / 30;
-let lastFrameTime = 0;
-
-useFrame((state) => {
-  const currentTime = state.clock.getElapsedTime() * 1000;
-  if (currentTime - lastFrameTime < FRAME_INTERVAL) return;
-  lastFrameTime = currentTime;
-  
-  // Your update logic
-});
-```
-
----
-
-## Advanced Customization
-
-### Custom Viseme Mapping
-
-Create your own viseme-to-phoneme mapping for different languages:
-
-```javascript
-// English (default)
-const visemeMapping = {
-  viseme_aa: ['ah', 'aa', 'ae'],
-  viseme_E: ['eh', 'e'],
-  viseme_I: ['ee', 'i', 'y'],
-  viseme_O: ['oh', 'o', 'aw'],
-  viseme_U: ['oo', 'u', 'w']
-};
-
-// Spanish
-const spanishVisemeMapping = {
-  viseme_aa: ['a'],
-  viseme_E: ['e'],
-  viseme_I: ['i'],
-  viseme_O: ['o'],
-  viseme_U: ['u']
-};
-```
-
-### Custom Expression Presets
-
-Define your own expression combinations:
-
-```javascript
-const customExpressions = {
-  thinking: {
-    browInnerUp: 0.4,
-    browOuterUpLeft: 0.2,
-    eyeSquintLeft: 0.3,
-    eyeSquintRight: 0.3,
-    mouthLeft: 0.2
-  },
-  skeptical: {
-    browInnerUp: 0.6,
-    browOuterUpLeft: 0.3,
-    browOuterUpRight: 0.1,
-    eyeSquintLeft: 0.2,
-    mouthSmileLeft: 0.1,
-    mouthFrownRight: 0.1
-  }
-};
-```
-
----
-
-## Contributing & Resources
-
-### Try It Yourself!
-
-Want to build your own AI avatar? Here's how to get started:
-
-#### Quick Setup (5 minutes)
-
-1. **Clone the repo**
-   ```bash
-   git clone https://github.com/AgoraIO-Community/RPM-agora-agent.git
-   cd RPM-agora-agent
-   npm install
-   ```
-
-2. **Get your API keys**
-   - Agora: [console.agora.io](https://console.agora.io)
-   - OpenAI: [platform.openai.com](https://platform.openai.com)
-   - Azure Speech: [portal.azure.com](https://portal.azure.com)
-
-3. **Configure and run**
-   ```bash
-   npm run dev
-   ```
-
-4. **Start talking!**
-   Open `http://localhost:5173`, add your credentials in settings, and start chatting with your AI avatar.
-
-#### Customization Ideas
-
-- **Change the avatar**: Use any ReadyPlayer.me character
-- **Adjust personality**: Modify the GPT-4 system prompt
-- **Add gestures**: Extend the animation system with hand movements
-- **Custom expressions**: Create your own emotional presets
-- **Different voices**: Try various Azure TTS voices and accents
-- **Multi-language**: Add support for other languages with adjusted viseme mapping
-
-### Contributing
-
-We welcome contributions! Here's how you can help:
-
-1. **Bug Reports**: Open an issue with detailed reproduction steps
-2. **Feature Requests**: Describe the feature and use case in discussions
-3. **Pull Requests**: Fork, create a feature branch, and submit PR
-4. **Documentation**: Improve this guide or add examples and tutorials
-
-#### Development Workflow
-
-```bash
-# Create feature branch
-git checkout -b feature/your-feature-name
-
-# Make changes and test
-npm run dev
-
-# Commit with descriptive message
-git commit -m "feat: add emotion detection support"
-
-# Push and create PR
-git push origin feature/your-feature-name
-```
-
----
-
-## Resources & Community
-
-### Official Documentation
-- [Agora RTC SDK](https://docs.agora.io/en/voice-calling/overview/product-overview)
-- [Agora ConvoAI](https://docs.agora.io/en/conversational-ai/overview/product-overview)
-- [ReadyPlayer.me Documentation](https://docs.readyplayer.me/)
-- [Three.js Docs](https://threejs.org/docs/)
-- [React Three Fiber](https://docs.pmnd.rs/react-three-fiber/)
-- [WebAudio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
-
-### Community & Support
-- [Agora Developer Community](https://www.agora.io/en/community/)
-- [Three.js Discord](https://discord.gg/three-js)
-- [ReadyPlayer.me Discord](https://discord.gg/readyplayerme)
-- 📧 Email: support@yourproject.com
-- 💬 Discord: [Join our community](https://discord.gg/yourproject)
-- 🐛 Issues: [GitHub Issues](https://github.com/AgoraIO-Community/RPM-agora-agent/issues)
-
-### Related Projects & Tools
-- [Mixamo Animations](https://www.mixamo.com/) - Free character animations
-- [ARKit Face Tracking](https://developer.apple.com/documentation/arkit/arfaceanchor/blendshapelocation) - Blend shape reference
-- [Oculus Lipsync](https://developer.oculus.com/documentation/unity/audio-ovrlipsync-unity/) - Alternative lip sync approach
-- [Blender](https://www.blender.org/) - 3D modeling and animation
-
-### Acknowledgments
-
-Special thanks to:
-- **Agora** for their amazing ConvoAI platform and support
-- **ReadyPlayer.me** for making high-quality avatars accessible to everyone
-- **Three.js community** for endless support and incredible tools
-- **Open source contributors** who make projects like this possible
-
----
-
 ## Final Thoughts
 
 Building real-time AI avatars was challenging but incredibly rewarding. We combined cutting-edge AI, 3D graphics, audio processing, and real-time communication to create something that feels magical.
@@ -1006,6 +843,19 @@ The technology is here. The tools are available. The only limit is our imaginati
 - 🚀 Mobile optimization and performance improvements
 
 **What will you build?**
+
+---
+
+## Get Involved
+
+We'd love to hear from you! Whether you have questions, want to contribute, or have built something amazing with this project:
+
+- **📧 Reach Out**: Open an issue on [GitHub](https://github.com/AgoraIO-Community/RPM-agora-agent/issues) for questions, bug reports, or feature requests
+- **🤝 Contribute**: Interested in contributing to this repo? We welcome pull requests and collaboration
+- **💡 Share Your Work**: Built advanced customizations or unique implementations? Share them with the community!
+- **🌟 Join the Community**: Connect with other developers on [Agora's Developer Community](https://www.agora.io/en/community/)
+
+Your feedback and contributions help make this project better for everyone.
 
 ---
 
