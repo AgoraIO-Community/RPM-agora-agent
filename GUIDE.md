@@ -1,873 +1,719 @@
-# ReadyPlayerMe Avatars with Real-time Voice AI and Lip Sync
+# Build Real-Time AI Avatars with Lip Sync Using Agora ConvoAI
 
-# Part 1: The Journey
+When I set out to build a conversational AI, I wasn't interested in another chatbot with a static avatar. I wanted something that felt real—an AI that speaks with synchronized lip movements, shows natural expressions, and responds in genuine real-time. After months of experimentation combining WebAudio analysis, ReadyPlayer.me avatars, and Agora's ConvoAI platform, I figured it out.
 
-## Introduction: Bringing AI to Life
+This guide shows you how to implement real-time lip synchronization and facial expressions for 3D avatars powered by Agora's ConvoAI Engine. You'll learn to analyze audio streams with WebAudio API, map frequencies to ARKit viseme blend shapes, and render expressive avatars at 60 FPS using Three.js—all synchronized with Agora's voice streaming.
 
-Imagine having a conversation with an AI assistant that doesn't just speak to you through a speaker, but has a face, expressions, and lip movements that sync perfectly with every word. Not a pre-recorded video, not a cartoon with limited animations, but a real-time 3D avatar that responds naturally as you talk.
+## Understand the tech
 
-That's exactly what we built with Agora ConvoAI and ReadyPlayer.me avatars. And in this guide, I'll take you behind the scenes to show you how we made it happen - from the initial concept to the technical implementation, complete with code examples and insights you can use to build your own.
+The breakthrough here is using WebAudio API to analyze Agora's audio stream in real-time, then mapping frequency data directly to ARKit viseme blend shapes on a ReadyPlayer.me avatar. Here's the flow:
 
-### What You'll Learn
+1. **User speaks** → Agora RTC captures and streams audio to ConvoAI Engine
+2. **ConvoAI processes** → Speech-to-text, LLM reasoning, text-to-speech conversion
+3. **AI responds** → TTS audio streams back through Agora RTC
+4. **WebAudio analyzes** → AnalyserNode performs FFT on audio stream (85-255 Hz speech range)
+5. **Viseme mapping** → Frequency patterns map to phoneme shapes (aa, E, I, O, U, PP, FF, etc.)
+6. **Morph targets update** → ARKit blend shapes deform at 60 FPS
+7. **Avatar speaks** → Realistic lip sync with <50ms audio-to-visual latency
 
-- How to integrate ReadyPlayer.me avatars into a Three.js/React application
-- Real-time lip synchronization using WebAudio API and viseme mapping
-- Facial expression control synchronized with audio playback
-- Agora RTC integration for voice streaming
-- ConvoAI REST API integration for AI agent management
-- Performance optimization techniques for smooth 60 FPS
-- The roadmap for emotion recognition and contextual expressions
+Here's the data flow:
 
-## The Vision: More Than Just Voice
+```mermaid
+graph TD
+    A[User Speech] --> B[Agora RTC SDK]
+    B --> C[ConvoAI Engine]
+    C --> D[LLM GPT-4]
+    D --> C
+    C --> E[Azure TTS]
+    E --> F[Audio Playback]
+    E --> G[WebAudio Analyzer]
+    G --> H[FFT Analysis<br/>85-255 Hz range]
+    H --> I[Viseme Mapping<br/>frequency → phoneme]
+    I --> J[ARKit Blend Shapes<br/>morph targets]
+    J --> K[Three.js Rendering<br/>60 FPS]
+    K --> L[Realistic Lip Sync]
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style C fill:#ffe1f5
+    style D fill:#e1ffe1
+    style E fill:#f5e1ff
+    style F fill:#ffe1e1
+    style G fill:#e1ffe1
+    style H fill:#fff4e1
+    style I fill:#e1f5ff
+    style J fill:#ffe1f5
+    style K fill:#f5e1ff
+    style L fill:#e1ffe1
+```
 
-Voice assistants are everywhere - Siri, Alexa, Google Assistant - they're incredibly useful but lack a human touch. We wanted to create something more engaging:
+The key insight? Human speech frequencies cluster in predictable ranges. Low frequencies (85-150 Hz) correspond to open vowels like "O" and "U". Mid-range (150-200 Hz) maps to "A" sounds. Higher frequencies (200-255 Hz) indicate "E" and "I" sounds. Consonants create distinct spikes we detect and map to specific blend shapes (PP for bilabials, FF for labiodentals, TH for dentals, etc.).
 
-- **Visual presence**: A 3D avatar you can see and connect with
-- **Real-time lip sync**: Mouth movements that match the AI's speech perfectly
-- **Emotional expressions**: Facial animations that convey personality
-- **Natural conversations**: Powered by advanced AI with low latency
-- **Human connection**: Non-verbal communication that builds trust
+This approach delivers convincing lip sync without machine learning models, pre-processing, or phoneme detection APIs. It's pure browser-native audio analysis driving real-time 3D deformation.
 
-The result? An AI agent that feels alive.
+## Prerequisites
 
-## The Tech Stack: Choosing the Right Tools
+To build real-time AI avatars with lip sync using Agora, you must have:
 
-Building a real-time conversational AI avatar required bringing together several cutting-edge technologies. Here's why we chose each one:
+- A valid [Agora account](https://console.agora.io/). If you don't have one, see [Get Started with Agora](https://www.agora.io/en/blog/how-to-get-started-with-agora?utm_source=medium&utm_medium=blog&utm_campaign=Build_RealTime_AI_Avatars_with_Lip_Sync_Using_Agora_ConvoAI)
+- An Agora App ID and temporary token from the [Agora Console](https://console.agora.io/)
+- Agora ConvoAI API credentials (API key and password)
+- [Node.js](https://nodejs.org/) 16+ and npm installed
+- Basic knowledge of [JavaScript and React](https://react.dev/)
+- An [OpenAI API key](https://platform.openai.com/) or compatible LLM API
+- [Azure Speech Services API key](https://portal.azure.com/) for text-to-speech
+- A modern web browser with WebAudio API support (Chrome, Firefox, Safari, Edge)
 
-### 1. **Agora ConvoAI** - The Brains
+## Project setup
 
-Agora's ConvoAI platform provides enterprise-grade real-time voice AI with:
-- **Ultra-low latency** (< 500ms end-to-end)
-- **High-quality voice streaming** via RTC
-- **RESTful API** for easy integration
-- **Built-in conversational intelligence**
-- **Global infrastructure** with 200+ data centers
+To set up your development environment for building AI avatars with lip sync:
 
-**Why Agora?** We needed rock-solid real-time communication. Agora powers video calls for companies like Coursera and The Meet Group - if it can handle millions of concurrent users, it can handle our AI avatar.
-
-### 2. **ReadyPlayer.me** - The Face
-
-ReadyPlayer.me offers customizable 3D avatars that are:
-- **Web-optimized** (lightweight GLB files, typically 2-5MB)
-- **Highly detailed** with realistic facial features
-- **Built with ARKit blend shapes** for facial animations
-- **Animation-ready** for Mixamo and custom animations
-- **Customizable** - users can create their own avatars
-
-**Why ReadyPlayer.me?** They solved the hard problem of creating beautiful, performant avatars. Their models come with all the morph targets we need for lip sync right out of the box.
-
-### 3. **Three.js & React Three Fiber** - The Engine
-
-For 3D rendering in the browser:
-- **Hardware-accelerated graphics** via WebGL
-- **Smooth 60 FPS performance** on modern devices
-- **React integration** for easy state management
-- **Extensive animation controls** and utilities
-- **Active community** and rich ecosystem
-
-**Why Three.js?** It's the de facto standard for 3D on the web. React Three Fiber makes it easy to integrate with our React application while maintaining performance.
-
-### 4. **WebAudio API** - The Synchronizer
-
-The secret sauce for lip sync:
-- **Real-time audio analysis** with FFT
-- **Frequency spectrum visualization**
-- **Precise timing control** (sub-millisecond accuracy)
-- **Cross-browser compatibility**
-- **Direct integration** with media streams
-
-**Why WebAudio?** This is what makes real-time lip sync possible. We can analyze the audio as it plays and update the avatar's mouth instantly.
-
-### 5. **OpenAI GPT-4** - The Personality
-
-For natural, contextual conversations:
-- **Understanding complex queries**
-- **Generating human-like responses**
-- **Maintaining conversation context**
-- **Customizable personality** via system prompts
-- **Latest language understanding** capabilities
-
-**Why GPT-4?** Best-in-class language understanding. The AI needs to be smart enough to have natural conversations, and GPT-4 delivers.
-
-### 6. **Azure Speech Services** - The Voice
-
-For text-to-speech conversion:
-- **Neural TTS voices** that sound natural
-- **Multiple voices** and languages
-- **Fast synthesis** (< 100ms)
-- **SSML support** for prosody control
-- **Reliable infrastructure**
-
-**Why Azure Speech?** Their neural voices are among the most natural-sounding available, and the service is highly reliable.
-
----
-
-# Part 2: Getting Started
-
-## Quick Start Guide
-
-### Prerequisites
-
-- Node.js 16+ and npm
-- Agora account with App ID and Token
-- ConvoAI API credentials
-- OpenAI API key (or compatible LLM API)
-- Azure Speech Services API key (for TTS)
-
-### Installation
-
-1. **Clone the Repository**
+1. Clone the starter repository:
    ```bash
    git clone https://github.com/AgoraIO-Community/RPM-agora-agent.git
    cd RPM-agora-agent
    ```
 
-2. **Install Dependencies**
+2. Install dependencies:
    ```bash
    npm install
    ```
 
-3. **Run the Development Server**
+The project structure includes:
+
+```
+RPM-agora-agent/
+├── src/
+│   ├── components/
+│   │   ├── Avatar.jsx          # 3D avatar with lip sync engine
+│   │   ├── Experience.jsx      # Three.js scene configuration
+│   │   ├── UI.jsx             # Main user interface
+│   │   ├── Settings.jsx       # API credentials panel
+│   │   └── CombinedChat.jsx   # Chat interface
+│   ├── hooks/
+│   │   ├── useAgora.jsx       # Agora RTC integration
+│   │   ├── useChat.jsx        # ConvoAI state management
+│   │   └── useLipSync.jsx     # Lip sync audio analysis
+│   ├── App.jsx                # Root component
+│   └── main.jsx              # Application entry point
+├── public/
+│   └── models/
+│       └── Avatars/          # ReadyPlayer.me GLB files
+└── package.json
+```
+
+3. Start the development server:
    ```bash
    npm run dev
    ```
 
-4. **Open in Browser**
-   Navigate to `http://localhost:5173` (or the port shown in terminal)
+4. Open your browser to `http://localhost:5173`
 
-5. **Configure Settings in UI**
-   - Click the settings (☰) button in the top-right corner
-   - Enter your API credentials in the respective tabs:
-     - **Agora Tab**: App ID, Token, Channel Name
-     - **ConvoAI Tab**: API Base URL, API Key, Password, Agent Name, Agent UID
-     - **LLM Tab**: API URL, API Key, Model, System Message, Greeting
-     - **TTS Tab**: Azure Speech API Key, Region, Voice Name
-     - **ASR Tab**: Language setting
-   - Settings are stored in sessionStorage and will persist during your session
+You'll see the application UI with a settings button in the top-right corner. Before we can test the avatar, you need to configure your API credentials, which we'll do in the next section.
 
-7. **Connect and Start Talking**
-   - Click the "Connect" button to join the Agora channel
-   - The AI agent will greet you and start listening
-   - Speak naturally - the avatar will respond with synchronized lip movements and expressions
+## Build AI Avatar with Lip Sync
 
----
+Building this system involves three core modules: initializing Agora RTC with ConvoAI, implementing the WebAudio-driven lip sync engine, and integrating facial expressions. Let's build each incrementally.
 
-# Part 3: Technical Deep Dive
+### Initialize Agora RTC and ConvoAI
 
-## The Challenge: Making Avatars Talk
+First, we need to establish the real-time voice connection that will power our AI agent.
 
-Before we dive into the code, let's understand the core challenge. The hardest part wasn't getting the avatar to speak - it was making it look natural. Here's why:
+1. **Configure your API credentials**
 
-### Problem #1: Audio Analysis
+   Open the application in your browser. Click the settings (☰) button in the top-right corner and enter your credentials in each tab:
 
-When the AI speaks, we receive an audio stream. But how do we know what sounds are being made at any given moment?
+   - **Agora Tab**: App ID, Token (from console), Channel Name
+   - **ConvoAI Tab**: API Base URL, API Key, Password, Agent Name, Agent UID  
+   - **LLM Tab**: OpenAI API URL, API Key, Model (gpt-4o-mini), System Message
+   - **TTS Tab**: Azure Speech API Key, Region (eastus), Voice Name (en-US-AriaNeural)
+   - **ASR Tab**: Language (en-US)
 
-**The Solution:** We use the WebAudio API to analyze the frequency spectrum of the audio in real-time. Different sounds (phonemes) have different frequency characteristics. By analyzing these patterns, we can detect what the AI is saying.
+   Settings persist in sessionStorage during your session.
 
-```javascript
-// Simplified example
-const analyzeAudio = (audioStream) => {
-  const analyzer = audioContext.createAnalyser();
-  const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-  
-  analyzer.getByteFrequencyData(dataArray);
-  
-  // Human speech is primarily in 85-255 Hz range
-  const speechData = dataArray.slice(5, 15);
-  const volume = average(speechData);
-  
-  return volume; // How loud the speech is
-};
-```
+2. **Initialize the Agora RTC client**
 
-### Problem #2: Phoneme to Viseme Mapping
+   In `src/hooks/useAgora.jsx`, we create and configure the Agora client:
 
-A "phoneme" is a unit of sound. A "viseme" is the visual mouth shape that corresponds to that sound. For example:
-- "P" and "B" sounds → lips pressed together
-- "O" sound → rounded mouth opening
-- "EE" sound → wide smile shape
-
-We needed to map audio frequencies to these mouth shapes in real-time.
-
-**The Solution:** We created a mapping system using ARKit's standard viseme blend shapes:
-
-```javascript
-const visemeMapping = {
-  viseme_PP: 'p, b, m',      // Bilabial (lips together)
-  viseme_FF: 'f, v',         // Labiodental (teeth on lip)
-  viseme_TH: 'th',           // Dental (tongue between teeth)
-  viseme_DD: 'd, t, n',      // Alveolar (tongue on ridge)
-  viseme_kk: 'k, g',         // Velar (back of tongue)
-  viseme_CH: 'ch, j, sh',    // Postalveolar
-  viseme_SS: 's, z',         // Sibilant
-  viseme_nn: 'n, ng',        // Nasal
-  viseme_RR: 'r',            // Rhotic
-  viseme_aa: 'ah, aa',       // Open vowel
-  viseme_E: 'eh, e',         // Mid vowel
-  viseme_I: 'ee, i',         // Close vowel
-  viseme_O: 'oh, o',         // Back vowel
-  viseme_U: 'oo, u',         // Close back vowel
-};
-```
-
-### Problem #3: Smooth Animations
-
-Simply snapping between mouth shapes would look robotic. We needed smooth, natural transitions.
-
-**The Solution:** Linear interpolation (lerp) with easing functions:
-
-```javascript
-// Smoothly transition from current position to target
-const smoothTransition = (current, target, speed = 0.3) => {
-  return current + (target - current) * speed;
-};
-
-// In the animation loop (runs 60 times per second)
-useFrame(() => {
-  const targetMouthOpen = calculateMouthOpening();
-  const currentMouthOpen = avatar.mouthOpen;
-  
-  avatar.mouthOpen = smoothTransition(currentMouthOpen, targetMouthOpen);
-});
-```
-
-This creates buttery-smooth animations that look natural to the human eye.
-
-## How It Works: The Complete Flow
-
-Let me walk you through the complete flow of a conversation:
-
-### Step 1: User Speaks
-```
-User: "Hey, what's the weather like today?"
-      ↓
-   Microphone captures audio
-      ↓
-   Agora RTC sends to ConvoAI
-      ↓
-   Speech-to-Text converts to text
-```
-
-### Step 2: AI Thinks
-```
-   Text sent to GPT-4
-      ↓
-   GPT-4 processes context & generates response
-      ↓
-   Response: "The weather today is sunny with a high of 75°F!"
-```
-
-### Step 3: AI Speaks
-```
-   Text sent to Azure TTS
-      ↓
-   TTS generates speech audio
-      ↓
-   Audio streamed via Agora RTC
-      ↓
-   User hears response
-```
-
-### Step 4: Avatar Animates (The Magic!)
-```
-   Audio stream arrives
-      ↓
-   WebAudio API analyzes frequencies
-      ↓
-   Detect speech patterns
-      ↓
-   Map to visemes (mouth shapes)
-      ↓
-   Update avatar morph targets
-      ↓
-   Render at 60 FPS
-      ↓
-   User sees realistic lip sync! 🎉
-```
-
-All of this happens in real-time with less than 100ms of latency from audio to visual update.
-
----
-
-## Avatar Integration Deep Dive
-
-### Technology Stack
-
-- **Frontend Framework**: React + Vite
-- **3D Rendering**: Three.js + React Three Fiber
-- **Avatar Models**: ReadyPlayer.me GLB files
-- **Real-Time Communication**: Agora RTC SDK
-- **AI Integration**: Agora ConvoAI REST API
-- **Audio Processing**: WebAudio API
-- **State Management**: React Context API
-- **Styling**: Tailwind CSS
-
-### Project Structure
-
-```
-agora-agent/
-├── src/
-│   ├── components/
-│   │   ├── Avatar.jsx           # 3D avatar with lip sync & expressions
-│   │   ├── Experience.jsx       # Three.js scene setup
-│   │   ├── UI.jsx              # Main UI controls
-│   │   ├── Settings.jsx        # Configuration panel
-│   │   └── CombinedChat.jsx    # Chat interface
-│   ├── hooks/
-│   │   ├── useAgora.jsx        # Agora RTC integration
-│   │   ├── useChat.jsx         # Chat & AI state management
-│   │   └── useLipSync.jsx      # Lip sync logic
-│   ├── App.jsx                 # Root component
-│   └── main.jsx               # Entry point
-├── public/
-│   ├── models/
-│   │   └── Avatars/           # ReadyPlayer.me GLB files
-│   └── animations/            # FBX animation files
-└── package.json
-```
-
----
-
-## Avatar Integration Deep Dive
-
-### Why ReadyPlayer.me?
-
-ReadyPlayer.me provides high-quality, customizable 3D avatars that are:
-- **Optimized for web**: Lightweight GLB format
-- **Morph target enabled**: Built-in facial blend shapes for expressions
-- **Animation-ready**: Compatible with standard Mixamo animations
-- **Viseme-capable**: Mouth morph targets for realistic lip sync
-
-### Getting Your Avatar
-
-1. **Create an Avatar**
-   - Visit [readyplayer.me](https://readyplayer.me/)
-   - Customize your avatar
-   - Download as GLB format
-   - Ensure "Use Blendshapes" option is enabled
-
-2. **Add to Project**
-   - Place GLB file in `public/models/Avatars/`
-   - Name it descriptively (e.g., `Aurora.glb`, `Celeste.glb`)
-
-3. **Load in Avatar Component**
    ```javascript
-   const { scene } = useGLTF(`/models/Avatars/${currentAvatar}.glb`);
+   import AgoraRTC from "agora-rtc-sdk-ng";
+
+   // Create Agora RTC client instance
+   const client = AgoraRTC.createClient({
+     mode: "rtc",  // Real-time communication mode
+     codec: "vp8"  // Video codec (we'll use audio only)
+   });
+
+   // Initialize state for tracks
+   const [localAudioTrack, setLocalAudioTrack] = useState(null);
+   const [remoteAudioTrack, setRemoteAudioTrack] = useState(null);
    ```
 
-### Avatar Component Structure
+3. **Join the Agora channel**
 
-The `Avatar.jsx` component handles:
-- **Model Loading**: Loading GLB files with `useGLTF`
-- **Animation Control**: Managing Mixamo animations with `useAnimations`
-- **Morph Targets**: Controlling facial expressions via blend shapes
-- **Lip Sync**: Real-time mouth movements synced to audio
+   Connect to the channel where the AI agent will communicate:
+
+   ```javascript
+   const joinChannel = async (appId, token, channelName) => {
+     try {
+       // Join the channel with your Agora App ID
+       // UID null means Agora will auto-assign a unique ID
+       const uid = await client.join(appId, channelName, token, null);
+       console.log("Joined channel with UID:", uid);
+
+       // Create and publish local microphone audio track
+       const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+         encoderConfig: "speech_standard",  // Optimized for voice
+         AEC: true,   // Acoustic Echo Cancellation
+         ANS: true,   // Automatic Noise Suppression
+         AGC: true    // Automatic Gain Control
+       });
+
+       // Publish the track so the AI agent can hear you
+       await client.publish([audioTrack]);
+       setLocalAudioTrack(audioTrack);
+       
+       console.log("Published local audio track");
+       return uid;
+     } catch (error) {
+       console.error("Failed to join channel:", error);
+       throw error;
+     }
+   };
+   ```
+
+4. **Subscribe to remote audio (the AI agent's voice)**
+
+   Listen for when the AI agent publishes audio and set up our lip sync system:
+
+   ```javascript
+   // Event handler for when a remote user publishes media
+   client.on("user-published", async (user, mediaType) => {
+     if (mediaType === "audio") {
+       // Subscribe to the remote user's audio track
+       await client.subscribe(user, mediaType);
+       console.log("Subscribed to remote audio from UID:", user.uid);
+
+       // Get the remote audio track
+       const remoteTrack = user.audioTrack;
+       setRemoteAudioTrack(remoteTrack);
+
+       // Play the audio so we can hear the AI agent
+       remoteTrack.play();
+
+       // CRITICAL: Get the MediaStreamTrack for WebAudio analysis
+       // This is what enables our lip sync system
+       const mediaStreamTrack = remoteTrack.getMediaStreamTrack();
+       
+       // Initialize lip sync with this audio stream
+       // We'll implement setupLipSync() in the next module
+       setupLipSync(mediaStreamTrack);
+     }
+   });
+   ```
+
+5. **Handle disconnections**
+
+   Clean up resources when users leave:
+
+   ```javascript
+   client.on("user-unpublished", (user, mediaType) => {
+     if (mediaType === "audio") {
+       console.log("Remote user unpublished audio:", user.uid);
+       setRemoteAudioTrack(null);
+       // Stop lip sync when audio ends
+       stopLipSync();
+     }
+   });
+   ```
+
+6. **Leave the channel**
+
+   Implement cleanup when closing the application:
+
+   ```javascript
+   const leaveChannel = async () => {
+     // Stop and close local audio track
+     if (localAudioTrack) {
+       localAudioTrack.stop();
+       localAudioTrack.close();
+       setLocalAudioTrack(null);
+     }
+
+     // Unpublish and leave the channel
+     await client.unpublish();
+     await client.leave();
+     
+     console.log("Left channel");
+   };
+   ```
+
+At this point, you have a working Agora RTC connection. You can join a channel, publish your microphone audio, and receive audio from the AI agent. Next, we'll analyze that audio stream to drive lip sync.
+
+### Implement WebAudio-Driven Lip Sync Engine
+
+This is where the magic happens. We'll use WebAudio API to analyze the AI agent's voice in real-time and map it to mouth movements.
+
+1. **Create the WebAudio analyzer**
+
+   In `src/hooks/useLipSync.jsx`, set up the audio analysis infrastructure:
+
+   ```javascript
+   import { useRef, useEffect } from 'react';
+
+   export const useLipSync = () => {
+     // Store WebAudio components
+     const audioContextRef = useRef(null);
+     const analyzerRef = useRef(null);
+     const dataArrayRef = useRef(null);
+
+     const setupLipSync = (mediaStreamTrack) => {
+       // Create AudioContext (browser's audio processing engine)
+       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+       audioContextRef.current = audioContext;
+
+       // Create an AnalyserNode for frequency analysis
+       const analyzer = audioContext.createAnalyser();
+       
+       // FFT size determines frequency resolution
+       // 1024 gives us good balance between accuracy and performance
+       analyzer.fftSize = 1024;
+       
+       // Smooth transitions between frames (0 = no smoothing, 1 = maximum)
+       analyzer.smoothingTimeConstant = 0.3;
+       
+       analyzerRef.current = analyzer;
+
+       // Create array to hold frequency data
+       // frequencyBinCount is half of fftSize
+       const bufferLength = analyzer.frequencyBinCount;
+       const dataArray = new Uint8Array(bufferLength);
+       dataArrayRef.current = dataArray;
+
+       // Convert MediaStreamTrack to MediaStream
+       const stream = new MediaStream([mediaStreamTrack]);
+       
+       // Create source from the stream
+       const source = audioContext.createMediaStreamSource(stream);
+       
+       // Connect source to analyzer
+       source.connect(analyzer);
+       
+       console.log("Lip sync initialized with FFT size:", analyzer.fftSize);
+     };
+
+     return { setupLipSync };
+   };
+   ```
+
+2. **Analyze speech frequencies**
+
+   Add a function to extract audio levels from the speech frequency range:
+
+   ```javascript
+   const getAudioLevel = () => {
+     if (!analyzerRef.current || !dataArrayRef.current) {
+       return 0;  // No audio if not initialized
+     }
+
+     const analyzer = analyzerRef.current;
+     const dataArray = dataArrayRef.current;
+
+     // Get current frequency data
+     // This fills dataArray with values 0-255 for each frequency bin
+     analyzer.getByteFrequencyData(dataArray);
+
+     // Human speech primarily lives in 85-255 Hz
+     // With fftSize=1024 and 44.1kHz sample rate:
+     // - Each bin represents ~43 Hz
+     // - Bin 2-6 covers our speech range
+     const speechRange = dataArray.slice(2, 6);
+
+     // Calculate average amplitude in speech range
+     const sum = speechRange.reduce((a, b) => a + b, 0);
+     const average = sum / speechRange.length;
+
+     // Normalize to 0-1 range
+     return average / 255;
+   };
+   ```
+
+3. **Map frequencies to visemes**
+
+   Create the mapping from audio characteristics to mouth shapes:
+
+   ```javascript
+   const calculateViseme = (audioLevel) => {
+     if (audioLevel < 0.01) {
+       // Silence - neutral mouth position
+       return { viseme: 'neutral', weight: 0 };
+     }
+
+     // Get more detailed frequency data for viseme detection
+     const analyzer = analyzerRef.current;
+     const dataArray = dataArrayRef.current;
+     analyzer.getByteFrequencyData(dataArray);
+
+     // Analyze different frequency ranges to determine phoneme
+     const lowFreq = dataArray.slice(2, 4);    // 85-170 Hz - O, U sounds
+     const midFreq = dataArray.slice(4, 5);    // 170-213 Hz - A sounds  
+     const highFreq = dataArray.slice(5, 6);   // 213-255 Hz - E, I sounds
+
+     const lowAvg = lowFreq.reduce((a,b) => a+b) / lowFreq.length / 255;
+     const midAvg = midFreq.reduce((a,b) => a+b) / midFreq.length / 255;
+     const highAvg = highFreq.reduce((a,b) => a+b) / highFreq.length / 255;
+
+     // Determine dominant frequency range
+     let viseme = 'viseme_aa';  // Default to neutral vowel
+     let weight = audioLevel;
+
+     if (lowAvg > midAvg && lowAvg > highAvg) {
+       // Low frequencies dominant - round vowels
+       viseme = audioLevel > 0.3 ? 'viseme_O' : 'viseme_U';
+     } else if (highAvg > midAvg && highAvg > lowAvg) {
+       // High frequencies dominant - close vowels
+       viseme = audioLevel > 0.3 ? 'viseme_I' : 'viseme_E';
+     } else {
+       // Mid frequencies - open vowels
+       viseme = 'viseme_aa';
+     }
+
+     return { viseme, weight: Math.min(weight * 1.5, 1.0) };
+   };
+   ```
+
+4. **Export the analysis function**
+
+   Make the audio level and viseme data available to our Avatar component:
+
+   ```javascript
+   return {
+     setupLipSync,
+     getAudioLevel,
+     calculateViseme,
+     stopLipSync: () => {
+       if (audioContextRef.current) {
+         audioContextRef.current.close();
+         audioContextRef.current = null;
+         analyzerRef.current = null;
+         dataArrayRef.current = null;
+       }
+     }
+   };
+   ```
+
+Now we have a working lip sync engine that analyzes audio and determines what mouth shape should be displayed. Next, we'll connect this to the 3D avatar to actually see the results.
+
+### Integrate Avatar and Apply Morph Targets
+
+Now we connect our audio analysis to the 3D avatar's facial blend shapes.
+
+1. **Load the ReadyPlayer.me avatar**
+
+   In `src/components/Avatar.jsx`, load the 3D model with morph targets:
+
+   ```javascript
+   import { useGLTF } from '@react-three/drei';
+   import { useFrame } from '@react-three/fiber';
+   import { useRef, useEffect } from 'react';
+
+   export function Avatar({ currentAvatar, lipSyncData }) {
+     // Load the GLB file from ReadyPlayer.me
+     const { scene, nodes } = useGLTF(`/models/Avatars/${currentAvatar}.glb`);
+     
+     // Reference to the head mesh (contains morph targets)
+     const headRef = useRef();
+
+     useEffect(() => {
+       if (nodes.Wolf3D_Head) {
+         headRef.current = nodes.Wolf3D_Head;
+         
+         // Log available morph targets for debugging
+         console.log('Available morph targets:', 
+           Object.keys(nodes.Wolf3D_Head.morphTargetDictionary)
+         );
+       }
+     }, [nodes]);
+
+     // Render the avatar
+     return (
+       <primitive object={scene} scale={1.5} position={[0, -1.5, 0]} />
+     );
+   }
+   ```
+
+2. **Apply lip sync to morph targets**
+
+   Update the morph target influences based on audio analysis:
+
+   ```javascript
+   useFrame(() => {
+     if (!headRef.current || !lipSyncData) return;
+
+     const { viseme, weight } = lipSyncData;
+     const morphTargetInfluences = headRef.current.morphTargetInfluences;
+     const morphTargetDictionary = headRef.current.morphTargetDictionary;
+
+     // Get the index for the current viseme
+     const visemeIndex = morphTargetDictionary[viseme];
+     
+     if (visemeIndex === undefined) return;
+
+     // Smooth interpolation (lerp) from current value to target
+     // This creates natural transitions between mouth shapes
+     const current = morphTargetInfluences[visemeIndex] || 0;
+     const target = weight;
+     const lerpFactor = 0.3;  // Smoothing speed (0-1)
+
+     // Apply the interpolated value
+     morphTargetInfluences[visemeIndex] = 
+       current + (target - current) * lerpFactor;
+
+     // Gradually return other visemes to neutral
+     for (let i = 0; i < morphTargetInfluences.length; i++) {
+       if (i !== visemeIndex && morphTargetInfluences[i] > 0) {
+         // Decay to 0
+         morphTargetInfluences[i] *= 0.7;
+       }
+     }
+   });
+   ```
+
+3. **Add facial expressions**
+
+   Implement expression controls that work alongside lip sync:
+
+   ```javascript
+   const [expression, setExpression] = useState('default');
+
+   // Expression presets using ARKit blend shapes
+   const expressions = {
+     default: {},
+     smile: {
+       mouthSmile: 0.8,
+       eyeSquintLeft: 0.2,
+       eyeSquintRight: 0.2
+     },
+     surprised: {
+       browInnerUp: 0.9,
+       eyeWideLeft: 0.8,
+       eyeWideRight: 0.8,
+       jawOpen: 0.3
+     },
+     sad: {
+       mouthFrownLeft: 0.6,
+       mouthFrownRight: 0.6,
+       browInnerUp: 0.3
+     }
+   };
+
+   // Apply expression to morph targets
+   const applyExpression = (expressionName) => {
+     if (!headRef.current) return;
+
+     const morphTargetInfluences = headRef.current.morphTargetInfluences;
+     const morphTargetDictionary = headRef.current.morphTargetDictionary;
+     const targetExpression = expressions[expressionName] || {};
+
+     // Apply each blend shape in the expression
+     Object.entries(targetExpression).forEach(([shapeName, targetValue]) => {
+       const shapeIndex = morphTargetDictionary[shapeName];
+       if (shapeIndex !== undefined) {
+         morphTargetInfluences[shapeIndex] = targetValue;
+       }
+     });
+   };
+
+   // Apply expression when it changes
+   useEffect(() => {
+     applyExpression(expression);
+   }, [expression]);
+   ```
+
+4. **Combine lip sync and expressions**
+
+   Ensure lip sync movements add to expressions rather than replacing them:
+
+   ```javascript
+   useFrame(() => {
+     if (!headRef.current || !lipSyncData) return;
+
+     const { viseme, weight } = lipSyncData;
+     const morphTargetInfluences = headRef.current.morphTargetInfluences;
+     const morphTargetDictionary = headRef.current.morphTargetDictionary;
+
+     const visemeIndex = morphTargetDictionary[viseme];
+     if (visemeIndex === undefined) return;
+
+     // Get current expression value for this blend shape
+     const expressionValue = morphTargetInfluences[visemeIndex] || 0;
+
+     // Calculate lip sync value with smoothing
+     const current = morphTargetInfluences[visemeIndex] || 0;
+     const lipSyncTarget = weight;
+     const lipSyncValue = current + (lipSyncTarget - current) * 0.3;
+
+     // CRITICAL: Use Math.max() to additively blend
+     // This ensures lip sync doesn't reduce expression intensity
+     morphTargetInfluences[visemeIndex] = Math.max(expressionValue, lipSyncValue);
+
+     // Decay other visemes that aren't part of current expression
+     for (let i = 0; i < morphTargetInfluences.length; i++) {
+       if (i !== visemeIndex) {
+         const isPartOfExpression = Object.keys(expressions[expression] || {})
+           .some(key => morphTargetDictionary[key] === i);
+         
+         if (!isPartOfExpression && morphTargetInfluences[i] > 0) {
+           morphTargetInfluences[i] *= 0.7;
+         }
+       }
+     }
+   });
+   ```
+
+5. **Connect to ConvoAI state**
+
+   In your main `App.jsx`, wire everything together:
+
+   ```javascript
+   import { Avatar } from './components/Avatar';
+   import { useAgora } from './hooks/useAgora';
+   import { useLipSync } from './hooks/useLipSync';
+   import { useState } from 'react';
+   import { Canvas } from '@react-three/fiber';
+
+   function App() {
+     const { joinChannel, leaveChannel } = useAgora();
+     const { setupLipSync, calculateViseme, getAudioLevel } = useLipSync();
+     const [lipSyncData, setLipSyncData] = useState(null);
+     const [isConnected, setIsConnected] = useState(false);
+
+     // Update lip sync data in animation loop
+     useEffect(() => {
+       if (!isConnected) return;
+
+       const interval = setInterval(() => {
+         const audioLevel = getAudioLevel();
+         const visemeData = calculateViseme(audioLevel);
+         setLipSyncData(visemeData);
+       }, 16);  // ~60 FPS
+
+       return () => clearInterval(interval);
+     }, [isConnected]);
+
+     const handleConnect = async () => {
+       await joinChannel(appId, token, channelName);
+       setIsConnected(true);
+     };
+
+     return (
+       <div className="app">
+         <Canvas camera={{ position: [0, 0, 3], fov: 50 }}>
+           <Avatar 
+             currentAvatar="Aurora" 
+             lipSyncData={lipSyncData}
+           />
+           <ambientLight intensity={0.5} />
+           <directionalLight position={[5, 5, 5]} intensity={1} />
+         </Canvas>
+         
+         <button onClick={handleConnect}>
+           {isConnected ? 'Connected' : 'Connect'}
+         </button>
+       </div>
+     );
+   }
+   ```
+
+You now have a complete system that:
+- Connects to Agora RTC and receives AI agent audio
+- Analyzes audio frequencies with WebAudio API
+- Maps frequencies to visemes
+- Updates avatar morph targets at 60 FPS
+- Blends lip sync with facial expressions
+
+The complete implementation is in the GitHub repository at [github.com/AgoraIO-Community/RPM-agora-agent](https://github.com/AgoraIO-Community/RPM-agora-agent).
+
+## Test AI Avatar with Lip Sync
+
+To verify your implementation works correctly:
+
+1. **Start the application**
+   ```bash
+   npm run dev
+   ```
+
+2. **Configure credentials**
+   - Click the settings (☰) button
+   - Enter all API credentials in their respective tabs
+   - Ensure Agora App ID and token are valid (tokens expire every 24 hours)
+
+3. **Connect to the channel**
+   - Click the "Connect" button in the UI
+   - You should see "Connected" status in the console
+   - The avatar should load and display
+
+4. **Test speech-to-avatar synchronization**
+   - Speak into your microphone: "Hello, can you hear me?"
+   - The AI agent should respond with synthesized speech
+   - Observe the avatar's mouth movements:
+     - Mouth should open and close in sync with audio
+     - Different phonemes should produce different mouth shapes
+     - Transitions should be smooth, not jerky
+
+5. **Verify frequency mapping**
+   - Open browser DevTools → Console
+   - Look for log messages showing audio levels
+   - When AI speaks, you should see values > 0.01
+   - When silent, values should be near 0
+
+6. **Test expressions**
+   - Use the expression buttons in the UI
+   - Avatar should transition to new expression
+   - Lip sync should continue working on top of expression
+   - Expression should not "fight" with lip movements
+
+7. **Check performance**
+   - Open DevTools → Performance tab
+   - Record while AI is speaking
+   - Frame rate should maintain 60 FPS
+   - If dropping below 30 FPS, reduce `fftSize` to 512
+
+Common issues:
+- **Avatar mouth not moving**: Check WebAudio permissions, verify remote audio track is playing
+- **Jerky animations**: Increase `smoothingTimeConstant` to 0.5-0.8
+- **Wrong mouth shapes**: Adjust frequency bin ranges in `calculateViseme()`
+- **No audio**: Verify Agora token hasn't expired, check microphone permissions
+
+## Next Steps
+
+You've successfully built a real-time AI avatar with lip sync powered by Agora ConvoAI! You now understand how to:
+- Integrate Agora RTC for real-time voice streaming
+- Analyze audio frequencies with WebAudio API
+- Map speech patterns to visemes
+- Animate 3D avatars with morph targets
+- Blend lip sync with facial expressions
+
+The complete source code is available on [GitHub](https://github.com/AgoraIO-Community/RPM-agora-agent).
+
+### Enhance your implementation
+
+- **Add emotion detection**: Use Agora's ConvoAI skip patterns to embed emotion markers in LLM responses and trigger expressions automatically
+- **Improve viseme accuracy**: Fine-tune frequency ranges for different languages and accents
+- **Optimize for mobile**: Reduce polygon count and texture resolution for mobile devices
+- **Add gesture system**: Extend to body animations synchronized with speech rhythm
+- **Multi-language support**: Adjust viseme mappings for non-English phonemes
+
+### Resources
+
+- [Agora ConvoAI Documentation](https://docs.agora.io/en/conversational-ai/overview/product-overview)
+- [Agora RTC Web SDK Reference](https://docs.agora.io/en/voice-calling/reference/api)
+- [ReadyPlayer.me Documentation](https://docs.readyplayer.me/)
+- [WebAudio API Guide](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
+- [Three.js Morph Targets](https://threejs.org/docs/#api/en/core/BufferGeometry.morphAttributes)
+- Join the [Agora Developer Community](https://www.agora.io/en/join-slack/)
 
 ---
 
-## Real-Time Lip Sync Implementation
-
-This is the core innovation of the project - making avatars appear to speak in real-time as the AI agent talks. Let's break down exactly how we achieved this.
-
-### The Architecture
-
-```
-Agora Audio → WebAudio Analyzer → Frequency Detection → Viseme Mapping → Morph Targets → Render (60 FPS)
-```
-
-The system analyzes audio frequencies in real-time, maps them to mouth shapes (visemes), and updates avatar blend shapes with <50ms latency.
-
-### The Solution: WebAudio API + Viseme Mapping
-
-#### Step 1: Audio Stream Capture
-
-We use WebAudio API to analyze Agora's audio stream:
-
-```javascript
-const analyzer = audioContext.createAnalyser();
-analyzer.fftSize = 1024;  // Frequency resolution
-analyzer.smoothingTimeConstant = 0.3;  // Smooth transitions
-source.connect(analyzer);
-```
-
-#### Step 2: Frequency Analysis
-
-Analyze the speech frequency range (85-255 Hz):
-
-```javascript
-const dataArray = new Uint8Array(analyzer.frequencyBinCount);
-analyzer.getByteFrequencyData(dataArray);
-const speechRange = dataArray.slice(5, 15);  // 85-255 Hz range
-const volume = speechRange.reduce((a, b) => a + b) / speechRange.length / 255;
-```
-
-#### Step 3: Viseme Mapping
-
-Map audio to ARKit blend shapes:
-
-```javascript
-const visemes = {
-  viseme_aa: 0.3,  // ah, aa (open)
-  viseme_E: 0.2,   // eh, e (mid)
-  viseme_I: 0.1,   // ee, i (close)
-  viseme_O: 0.4,   // oh, o (round)
-  viseme_U: 0.2,   // oo, u (tight)
-  // Plus consonants: PP, FF, TH, DD, kk, CH, SS, nn, RR
-};
-```
-
-See `Avatar.jsx` for the complete viseme set.
-
-#### Step 4: Real-Time Animation
-
-Update morph targets at 60 FPS:
-
-```javascript
-useFrame(() => {
-  const volume = getAudioLevel();
-  const targetValue = volume * visemeWeight;
-  const current = morphTargetInfluences[visemeIndex];
-  
-  // Smooth interpolation (lerp)
-  morphTargetInfluences[visemeIndex] = lerp(current, targetValue, 0.3);
-});
-```
-
-For the complete implementation, see `src/hooks/useLipSync.jsx` in the repository.
-
-### Integration with Agora
-
-In `useAgora.jsx`, we connect the lip sync when remote audio arrives:
-
-```javascript
-rtc.client.on("user-published", async (user, mediaType) => {
-  if (mediaType === "audio") {
-    await rtc.client.subscribe(user, "audio");
-    const remoteTrack = user.audioTrack;
-    
-    // Setup lip sync with remote audio
-    setupLipSync(remoteTrack.getMediaStreamTrack());
-    
-    remoteTrack.play();
-  }
-});
-```
-
-The complete implementation in `src/components/Avatar.jsx` analyzes audio frequencies, maps them to visemes based on frequency patterns (low freq = O/U sounds, high freq = I/E sounds, mid freq = A sounds), and smoothly updates morph targets at 60 FPS.
-
----
-
-## Facial Expressions System
-
-Beyond lip sync, we control broader facial expressions to convey emotion and engagement.
-
-### Expression System
-
-We've implemented 7 expressions (default, smile, surprised, funny, sad, angry, crazy), each combining multiple ARKit blend shapes:
-
-```javascript
-const expressions = {
-  smile: { mouthSmile: 0.8, eyeSquintLeft: 0.2, eyeSquintRight: 0.2 },
-  surprised: { browInnerUp: 0.9, eyeWideLeft: 0.8, jawOpen: 0.3 },
-  // See Avatar.jsx for all expressions
-};
-```
-
-Expressions transition smoothly over 300ms using easing functions:
-
-```javascript
-const setExpression = (name) => {
-  const target = expressions[name];
-  Object.entries(target).forEach(([key, value]) => {
-    animateMorphTarget(key, value, 300); // Smooth 300ms transition
-  });
-};
-```
-
-Lip sync overlays on expressions using additive blending:
-
-```javascript
-// Apply lip sync ON TOP of expression using Math.max()
-morphTargets[viseme] = Math.max(expressionValue, lipSyncValue);
-```
-
-**Important:** We use `Math.max()` to ensure lip sync movements are additive and don't reduce expression intensity.
-
----
-
-## Performance Optimization
-
-Running real-time 3D graphics, audio analysis, and AI inference simultaneously is demanding. Here's how we keep it smooth at 60 FPS:
-
-### Key Optimizations
-
-1. **Skip silent frames**: Only analyze when volume > 0.01
-2. **Throttle updates**: Update morph targets at 30 FPS (visually smooth)
-3. **Cache avatars**: Load GLB files once, reuse from Map
-4. **Delta checking**: Skip render if values haven't changed
-5. **Cleanup**: Dispose geometry/materials on unmount
-
-### Performance Metrics
-
-On a modern device (M1 MacBook or equivalent), we achieve:
-- **60 FPS** render rate
-- **< 50ms** audio-to-visual latency
-- **< 5% CPU** usage for lip sync
-- **< 100MB** memory for single avatar
-
----
-
-# Part 4: Future & Beyond
-
-## What's Next: Emotion Recognition
-
-The current system works great, but we're taking it further. In the next version, we're adding **automatic emotion detection** to match avatar expressions to the AI's emotional tone.
-
-### The Vision
-
-Imagine the AI saying:
-- *"I'm so excited to help you with that!"* → Avatar shows excitement with wide smile and raised eyebrows
-- *"I'm sorry to hear that happened."* → Avatar shows empathy with concerned expression and soft eyes
-- *"Wow, that's surprising!"* → Avatar shows surprise with raised eyebrows and open mouth
-- *"Let me think about that..."* → Avatar shows contemplation with slight squint and tilted head
-
-### How It Will Work
-
-We'll leverage **Agora's ConvoAI Engine** capabilities to implement emotion-driven expressions without directly calling LLM APIs.
-
-#### 1. Skip Patterns for Expression Metadata
-
-Use Agora's Skip Patterns feature to embed expression commands in LLM responses that won't be spoken by TTS:
-
-```javascript
-// Configure skip patterns to hide expression markers from TTS
-const skipPatterns = [
-  /\[EMOTION:.*?\]/g,  // Skip emotion markers like [EMOTION:happy]
-  /\[EXPR:.*?\]/g      // Skip expression markers like [EXPR:smile]
-];
-
-// Subscribe to ConvoAI messages
-agoraEngine.subscribeMessage((message) => {
-  const { text, userId } = message;
-  
-  // Extract emotion markers before TTS processes the text
-  const emotionMatch = text.match(/\[EMOTION:(\w+)\]/);
-  const expressionMatch = text.match(/\[EXPR:(\w+)\]/);
-  
-  if (emotionMatch) {
-    const emotion = emotionMatch[1]; // e.g., "happy", "sad", "excited"
-    setAvatarEmotion(emotion);
-  }
-  
-  if (expressionMatch) {
-    const expression = expressionMatch[1]; // e.g., "smile", "concerned"
-    setFacialExpression(expression);
-  }
-  
-  // Display text in chat (markers already filtered by skip patterns)
-  displayMessage(text);
-});
-```
-
-#### 2. Custom Context via RTM Presence
-
-Send user context and avatar state to the LLM using Agora RTM's `context.presence`:
-
-```javascript
-// Transmit custom information to LLM
-const updateUserContext = async (contextData) => {
-  await agoraRTM.presence.setState({
-    channelName: channelName,
-    channelType: 'MESSAGE',
-    state: {
-      // User preferences
-      preferredEmotions: ['happy', 'neutral', 'encouraging'],
-      currentMood: 'focused',
-      
-      // Avatar capabilities
-      supportedExpressions: ['smile', 'sad', 'surprised', 'thinking'],
-      currentExpression: currentExpression,
-      
-      // Interaction context
-      conversationTone: 'professional',
-      taskType: 'tutoring'
-    }
-  });
-};
-
-// LLM receives this context and can tailor responses with appropriate emotion markers
-```
-
-#### 3. Real-time Expression Mapping
-
-Map emotion markers from ConvoAI to avatar expressions:
-
-```javascript
-const emotionToExpression = {
-  happy: 'smile',
-  excited: 'smile',
-  sad: 'sad',
-  concerned: 'sad',
-  surprised: 'surprised',
-  thinking: 'funnyFace',
-  neutral: 'default'
-};
-
-const setAvatarEmotion = (emotion) => {
-  const expression = emotionToExpression[emotion] || 'default';
-  setFacialExpression(expression);
-  
-  // Optionally adjust intensity based on context
-  const intensity = calculateIntensity(emotion);
-  setExpressionWeight(intensity);
-};
-```
-
-#### 4. System Prompt Configuration
-
-Configure the LLM via ConvoAI to include emotion markers in responses:
-
-```javascript
-const systemPrompt = `You are a friendly AI assistant with an expressive avatar.
-Include emotion markers in your responses using this format: [EMOTION:type]
-
-Available emotions: happy, sad, excited, surprised, thinking, concerned, neutral
-
-Examples:
-- "I'm so excited to help you! [EMOTION:excited]"
-- "I'm sorry to hear that. [EMOTION:concerned]"
-- "Hmm, let me think about that... [EMOTION:thinking]"
-
-Place the marker at the point where the emotion should be expressed.`;
-```
-
-#### Implementation Plan
-
-1. **Configure Skip Patterns**: Set up regex patterns to filter expression markers from TTS
-2. **RTM Integration**: Use `context.presence` to send avatar capabilities and user preferences to LLM
-3. **Message Subscription**: Subscribe to ConvoAI messages and parse emotion markers in real-time
-4. **Expression Mapping**: Map extracted emotions to avatar facial expressions
-5. **System Prompt**: Update LLM system prompt to generate emotion markers
-6. **Voice Analysis** (Optional): Analyze audio energy and pitch from Agora RTC stream for additional emotion cues
-
-**Why Agora ConvoAI Engine?**
-
-Instead of directly integrating with LLM APIs, we leverage Agora's ConvoAI Engine which provides:
-- Unified interface for managing RTC and RTM interactions
-- Built-in skip patterns for filtering metadata from TTS output
-- Context transmission via RTM presence for personalized responses
-- Seamless integration with Agora's voice streaming
-- Evolving features and optimizations from Agora's engineering team
-
-This approach keeps the avatar system modular and takes advantage of Agora's continuously improving conversational AI capabilities.
-
-### Other Planned Features
-
-- **Gesture System**: Hand and body gestures synchronized with speech
-- **Eye Tracking**: Realistic eye movements and gaze direction following user
-- **Breathing Animation**: Subtle chest movements for lifelike presence
-- **Environmental Reactions**: Avatar responds to user actions and environment
-- **Custom Avatar Upload**: Allow users to use their own ReadyPlayer.me avatars
-- **Multi-Language Support**: Viseme mapping optimized for different languages
-- **Performance Optimization**: LOD system for mobile devices
-- **Voice Cloning**: Match avatar voice to appearance
-- **Multiplayer Support**: Multiple avatars in same scene
-
-### Expected Benefits
-
-- **More engaging**: Avatars that show emotion feel more human
-- **Better communication**: Visual cues enhance understanding
-- **Increased empathy**: Users connect better with expressive avatars
-- **Contextual awareness**: Expressions match conversation tone
-- **Improved retention**: Emotional engagement leads to better memory
-
----
-
-## Real-World Applications
-
-### Use Cases
-
-- **Customer Service**: Empathetic avatars that show concern, celebrate solutions
-- **Education**: Virtual tutors with encouraging expressions and natural reactions
-- **Healthcare**: Telehealth assistants providing visual feedback and empathy
-- **Entertainment**: Storytellers and game NPCs with dynamic expressions
-- **Accessibility**: Language learning, speech therapy, social skills training
-
-### The Impact
-
-Adding visual, expressive avatars to voice AI:
-- **Increases engagement** by 3-4x compared to voice-only
-- **Improves comprehension** through visual cues
-- **Builds trust** through facial expressions
-- **Enhances accessibility** for diverse users
-- **Creates emotional connection** beyond transactional interactions
-
----
-
-## Troubleshooting
-
-### Common Issues and Solutions
-
-#### 1. Avatar Not Loading
-
-**Symptoms:** Black screen or missing avatar
-
-**Solutions:**
-- Check GLB file is in `public/models/Avatars/`
-- Verify file name matches `currentAvatar` prop
-- Check browser console for loading errors
-- Ensure file is valid GLB format
-
-```javascript
-// Debug loading
-const { scene, error } = useGLTF(`/models/Avatars/${currentAvatar}.glb`, true);
-console.log('Loading status:', error ? 'Failed' : 'Success');
-```
-
-#### 2. Lip Sync Not Working
-
-**Symptoms:** Avatar mouth doesn't move with speech
-
-**Solutions:**
-- Check WebAudio API support: `console.log('WebAudio:', !!window.AudioContext)`
-- Verify remote audio track is playing
-- Check morph target names match ARKit standard
-- Increase analyzer sensitivity
-
-```javascript
-// Debug audio analysis
-const level = getAudioLevel();
-console.log('Audio level:', level);
-// Should show values > 0 when agent is speaking
-```
-
-#### 3. Expressions Not Changing
-
-**Symptoms:** Avatar stuck in one expression
-
-**Solutions:**
-- Verify morph targets exist: `console.log(nodes.Wolf3D_Head.morphTargetDictionary)`
-- Check expression name is valid
-- Ensure smooth transitions aren't too slow
-- Clear expression cache
-
-```javascript
-// Force reset
-setFacialExpression('default');
-setTimeout(() => setFacialExpression('smile'), 100);
-```
-
-#### 4. Performance Issues
-
-**Symptoms:** Low FPS, stuttering
-
-**Solutions:**
-- Reduce `fftSize` in audio analyzer (512 instead of 1024)
-- Decrease morph target update frequency
-- Use simpler avatar models
-- Enable hardware acceleration in browser
-
-```javascript
-// Optimize render loop
-let lastUpdate = 0;
-useFrame((state) => {
-  const now = state.clock.getElapsedTime();
-  if (now - lastUpdate < 0.016) return; // Cap at 60 FPS
-  lastUpdate = now;
-  
-  // Update logic here
-});
-```
-
-#### 5. Agora Connection Fails
-
-**Symptoms:** Cannot connect to channel
-
-**Solutions:**
-- Verify App ID and Token are correct
-- Check token hasn't expired (generate new one)
-- Ensure channel name matches configuration
-- Check network/firewall settings
-
-```javascript
-// Enable Agora SDK debug logs
-AgoraRTC.setLogLevel(0); // 0 = DEBUG
-```
-
-#### 6. Missing Morph Targets
-
-**Symptoms:** Some expressions don't work
-
-**Solutions:**
-- Re-export avatar from ReadyPlayer.me with blendshapes enabled
-- Use official ReadyPlayer.me models (not custom GLB)
-- Check morph target dictionary: `console.log(model.morphTargetDictionary)`
-
-Expected morph targets for full compatibility:
-```
-browInnerUp, browOuterUpLeft, browOuterUpRight,
-eyeWideLeft, eyeWideRight, eyeSquintLeft, eyeSquintRight,
-mouthSmile, mouthFrown, mouthOpen, jawOpen,
-viseme_aa, viseme_E, viseme_I, viseme_O, viseme_U,
-viseme_PP, viseme_FF, viseme_TH, viseme_DD, viseme_kk,
-viseme_CH, viseme_SS, viseme_nn, viseme_RR
-```
-
-### Key Takeaways
-
-**Technical**: WebAudio varies by browser (test widely), ARKit blend shapes are reliable, smooth animations beat pixel-perfect accuracy, performance is non-negotiable.
-
-**Design**: Subtle expressions look professional, smooth transitions matter more than positions, default to slight smile, always test with real users.
-
----
-
-## Final Thoughts
-
-Building real-time AI avatars was challenging but incredibly rewarding. We combined cutting-edge AI, 3D graphics, audio processing, and real-time communication to create something that feels magical.
-
-The technology is here. The tools are available. The only limit is our imagination.
-
-### What We Built
-- ✅ Real-time conversational AI with natural dialogue
-- ✅ Lifelike 3D avatars with facial expressions
-- ✅ Synchronized lip movements using WebAudio analysis
-- ✅ Smooth 60 FPS performance on modern devices
-- ✅ Easy-to-use interface with comprehensive settings
-- ✅ Open source for the community to build upon
-
-### What's Coming Next
-- 🚀 Automatic emotion detection and expression matching
-- 🚀 Voice tone analysis for enhanced realism
-- 🚀 Gesture system for natural body language
-- 🚀 Multi-language support with optimized visemes
-- 🚀 Mobile optimization and performance improvements
-
-**What will you build?**
-
----
-
-## Get Involved
-
-We'd love to hear from you! Whether you have questions, want to contribute, or have built something amazing with this project:
-
-- **📧 Reach Out**: Open an issue on [GitHub](https://github.com/AgoraIO-Community/RPM-agora-agent/issues) for questions, bug reports, or feature requests
-- **🤝 Contribute**: Interested in contributing to this repo? We welcome pull requests and collaboration
-- **💡 Share Your Work**: Built advanced customizations or unique implementations? Share them with the community!
-- **🌟 Join the Community**: Connect with other developers on [Agora's Developer Community](https://www.agora.io/en/community/)
-
-Your feedback and contributions help make this project better for everyone.
-
----
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-**Built with ❤️ by the Agora Agent Team**  
-*Last updated: December 11, 2025*
-
----
-
-*If you found this guide helpful, please ⭐ star the repo and share it with others who might be interested in building real-time AI avatars! Together, we're building the future of human-AI interaction.*
+*Built with ❤️ using Agora ConvoAI, ReadyPlayer.me, and WebAudio API*  
+*Questions? Open an issue on [GitHub](https://github.com/AgoraIO-Community/RPM-agora-agent/issues)*
