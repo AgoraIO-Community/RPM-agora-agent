@@ -133,164 +133,217 @@ First, we need to establish the real-time voice connection that will power our A
 
 2. **Initialize the Agora RTC client**
 
-   In `src/hooks/useAgora.jsx`, we create and configure the Agora client:
+   In `src/hooks/useAgora.jsx`, the client is created in 'live' mode with initial 'audience' role:
 
    ```javascript
    import AgoraRTC from "agora-rtc-sdk-ng";
 
-   // Create Agora RTC client instance
-   const client = AgoraRTC.createClient({
-     mode: "rtc",  // Real-time communication mode
-     codec: "vp8"  // Video codec (we'll use audio only)
+   // Create Agora RTC client in LIVE mode for better audio handling
+   const agoraClient = AgoraRTC.createClient({ 
+     mode: 'live',
+     codec: 'vp8' 
    });
 
-   // Initialize state for tracks
-   const [localAudioTrack, setLocalAudioTrack] = useState(null);
-   const [remoteAudioTrack, setRemoteAudioTrack] = useState(null);
+   // Set client role to audience initially
+   await agoraClient.setClientRole('audience');
    ```
+
+   > **Note**: The actual implementation uses 'live' mode with dynamic role switching (audience → host) for optimal ConvoAI integration. See [`useAgora.jsx` lines 515-527](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx#L515-L527).
 
 3. **Join the Agora channel**
 
-   Connect to the channel where the AI agent will communicate:
+   The actual implementation creates the microphone track, joins the channel, switches to host role, then publishes:
 
    ```javascript
-   const joinChannel = async (appId, token, channelName) => {
-     try {
-       // Join the channel with your Agora App ID
-       // UID null means Agora will auto-assign a unique ID
-       const uid = await client.join(appId, channelName, token, null);
-       console.log("Joined channel with UID:", uid);
-
-       // Create and publish local microphone audio track
-       const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-         encoderConfig: "speech_standard",  // Optimized for voice
-         AEC: true,   // Acoustic Echo Cancellation
-         ANS: true,   // Automatic Noise Suppression
-         AGC: true    // Automatic Gain Control
-       });
-
-       // Publish the track so the AI agent can hear you
-       await client.publish([audioTrack]);
-       setLocalAudioTrack(audioTrack);
-       
-       console.log("Published local audio track");
-       return uid;
-     } catch (error) {
-       console.error("Failed to join channel:", error);
-       throw error;
-     }
-   };
-   ```
-
-4. **Subscribe to remote audio (the AI agent's voice)**
-
-   Listen for when the AI agent publishes audio and set up our lip sync system:
-
-   ```javascript
-   // Event handler for when a remote user publishes media
-   client.on("user-published", async (user, mediaType) => {
-     if (mediaType === "audio") {
-       // Subscribe to the remote user's audio track
-       await client.subscribe(user, mediaType);
-       console.log("Subscribed to remote audio from UID:", user.uid);
-
-       // Get the remote audio track
-       const remoteTrack = user.audioTrack;
-       setRemoteAudioTrack(remoteTrack);
-
-       // Play the audio so we can hear the AI agent
-       remoteTrack.play();
-
-       // CRITICAL: Get the MediaStreamTrack for WebAudio analysis
-       // This is what enables our lip sync system
-       const mediaStreamTrack = remoteTrack.getMediaStreamTrack();
-       
-       // Initialize lip sync with this audio stream
-       // We'll implement setupLipSync() in the next module
-       setupLipSync(mediaStreamTrack);
-     }
-   });
-   ```
-
-5. **Handle disconnections**
-
-   Clean up resources when users leave:
-
-   ```javascript
-   client.on("user-unpublished", (user, mediaType) => {
-     if (mediaType === "audio") {
-       console.log("Remote user unpublished audio:", user.uid);
-       setRemoteAudioTrack(null);
-       // Stop lip sync when audio ends
-       stopLipSync();
-     }
-   });
-   ```
-
-6. **Leave the channel**
-
-   Implement cleanup when closing the application:
-
-   ```javascript
-   const leaveChannel = async () => {
-     // Stop and close local audio track
-     if (localAudioTrack) {
-       localAudioTrack.stop();
-       localAudioTrack.close();
-       setLocalAudioTrack(null);
-     }
-
-     // Unpublish and leave the channel
-     await client.unpublish();
-     await client.leave();
+   const joinChannel = async () => {
+     // Create local audio track with 48kHz sample rate
+     const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+       encoderConfig: {
+         sampleRate: 48000,
+         stereo: false,
+         bitrate: 128,
+       }
+     });
+     setLocalAudioTrack(audioTrack);
      
-     console.log("Left channel");
+     // Join the channel
+     await client.join(
+       agoraConfig.appId,
+       agoraConfig.channel,
+       agoraConfig.token,
+       agoraConfig.uid
+     );
+     
+     // Switch to host role to publish audio
+     await client.setClientRole('host');
+     
+     // Publish local audio track
+     await client.publish([audioTrack]);
+     
+     setIsJoined(true);
+     
+     // Start ConvoAI Agent via REST API
+     await startConvoAIAgent();
    };
    ```
 
-At this point, you have a working Agora RTC connection. You can join a channel, publish your microphone audio, and receive audio from the AI agent. Next, we'll analyze that audio stream to drive lip sync.
+   > **Note**: See the complete implementation in [`useAgora.jsx` lines 1075-1155](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx#L1075-L1155) which includes error handling and validation.
+
+4. **Start the ConvoAI Agent to join the channel**
+
+   This is the critical step that makes the AI agent join the same Agora channel. We call the ConvoAI REST API:
+
+   ```javascript
+   const startConvoAIAgent = async () => {
+     const agoraConfig = getAgoraConfig();
+     const convoaiConfig = getConvoAIConfig();
+     
+     // Generate unique name for this agent session
+     const uniqueName = `agora-agent-${Date.now()}`;
+     
+     // ConvoAI API endpoint: POST /projects/{appId}/join
+     const apiUrl = `${convoaiConfig.baseUrl}/projects/${agoraConfig.appId}/join`;
+     
+     // Request body with all configuration
+     const requestBody = {
+       "name": uniqueName,
+       "properties": {
+         "channel": agoraConfig.channel,
+         "token": agoraConfig.token,
+         "name": convoaiConfig.agentName,
+         "agent_rtc_uid": convoaiConfig.agentUid.toString(),
+         "remote_rtc_uids": ["*"], // Listen to all users
+         "idle_timeout": 120,
+         "llm": {
+           "url": convoaiConfig.llmUrl,
+           "api_key": convoaiConfig.llmApiKey,
+           "system_messages": [{
+             "role": "system",
+             "content": convoaiConfig.systemMessage
+           }],
+           "max_history": 32,
+           "greeting_message": convoaiConfig.greeting,
+           "params": {
+             "model": convoaiConfig.llmModel
+           }
+         },
+         "tts": {
+           "vendor": "microsoft",
+           "params": {
+             "key": convoaiConfig.ttsApiKey,
+             "region": convoaiConfig.ttsRegion,
+             "voice_name": convoaiConfig.ttsVoiceName
+           }
+         },
+         "asr": {
+           "language": convoaiConfig.asrLanguage
+         }
+       }
+     };
+     
+     // Make the API call with Basic Auth
+     const response = await fetch(apiUrl, {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+         'Authorization': generateBasicAuthHeader(),
+       },
+       body: JSON.stringify(requestBody),
+     });
+     
+     if (!response.ok) {
+       const errorText = await response.text();
+       throw new Error(`ConvoAI API Error (${response.status}): ${errorText}`);
+     }
+     
+     const result = await response.json();
+     
+     // Store the agent ID for cleanup later
+     setAgentId(result.agent_id || result.id);
+     
+     return result;
+   };
+   ```
+
+   **What happens here:**
+   - ConvoAI Engine receives this request
+   - It creates an AI agent instance with the specified UID
+   - The agent joins your Agora channel as a remote user
+   - Agent listens to audio from users (ASR → speech-to-text)
+   - Agent processes with LLM (OpenAI GPT-4)
+   - Agent responds with TTS (Azure Speech) audio
+   - The agent's audio publishes to the channel with the specified `agent_rtc_uid`
+
+   > **Note**: The actual implementation is in [`useAgora.jsx` lines 906-1020](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx#L906-L1020) with full error handling and logging.
+
+5. **Subscribe to remote audio (the AI agent's voice)**
+
+   The event handler subscribes to the remote user and sets up lip sync if it's the ConvoAI agent:
+
+   ```javascript
+   agoraClient.on('user-published', async (user, mediaType) => {
+     // Subscribe to the user's media
+     await agoraClient.subscribe(user, mediaType);
+     
+     const agoraConfig = getAgoraConfig();
+     
+     // Check if this is the ConvoAI agent's audio
+     if (mediaType === 'audio' && user.uid == agoraConfig.convoAIUid) {
+       const audioTrack = user.audioTrack;
+       
+       if (audioTrack) {
+         // Play the audio
+         audioTrack.play();
+         
+         // Set up WebAudio API for real-time lip sync analysis
+         const mediaStreamTrack = audioTrack.getMediaStreamTrack();
+         
+         // Create AudioContext
+         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+         
+         // Resume if suspended (common on mobile/browser restrictions)
+         if (audioContext.state === 'suspended') {
+           await audioContext.resume();
+         }
+         
+         // Create MediaStream source and analyser
+         const mediaStreamSource = audioContext.createMediaStreamSource(
+           new MediaStream([mediaStreamTrack])
+         );
+         const analyser = audioContext.createAnalyser();
+         
+         // Connect and configure
+         mediaStreamSource.connect(analyser);
+         analyser.fftSize = 256;
+         audioAnalyserRef.current = analyser;
+         
+         // Start the analysis loop (shown in next section)
+         analyzeAudio();
+       }
+     }
+     
+     setRemoteUsers(users => [...users, user]);
+   });
+   ```
+
+   > **Note**: This is the actual implementation from [`useAgora.jsx` lines 528-610](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx#L528-L610), simplified by removing verbose logging.
+
+At this point, you have the core Agora RTC connection established. The complete implementation in `useAgora.jsx` also handles disconnections, cleanup, and error cases. Next, we'll analyze the audio stream to drive lip sync.
 
 ### Implement WebAudio-Driven Lip Sync Engine
 
 This is where the magic happens. We'll use WebAudio API to analyze the AI agent's voice in real-time and map it to mouth movements.
 
-1. **Create the WebAudio analyzer**
+> **Note**: The code examples below are simplified for clarity, removing verbose logging and debug statements. The complete implementation with full error handling and logging can be found in [`src/hooks/useAgora.jsx`](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx) (lines 580-700).
 
-   In `src/hooks/useAgora.jsx`, when we subscribe to the remote audio track, we set up WebAudio analysis:
+1. **WebAudio analyzer setup (from previous section)**
 
-   ```javascript
-   // Inside the user-published event handler
-   const mediaStreamTrack = audioTrack.getMediaStreamTrack();
+   As shown in the `user-published` handler above, the WebAudio analyzer is created immediately when the ConvoAI agent's audio arrives. The key setup is:
    
-   // Create AudioContext (browser's audio processing engine)
-   const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-   
-   // Resume audio context if suspended (common on mobile/browser restrictions)
-   if (audioContext.state === 'suspended') {
-     console.log('🔄 Resuming suspended audio context...');
-     await audioContext.resume();
-   }
-   
-   // Create MediaStream source from the remote audio track
-   const mediaStreamSource = audioContext.createMediaStreamSource(
-     new MediaStream([mediaStreamTrack])
-   );
-   
-   // Create AnalyserNode for frequency analysis
-   const analyser = audioContext.createAnalyser();
-   
-   // Connect source to analyzer
-   mediaStreamSource.connect(analyser);
-   
-   // FFT size of 256 gives us 128 frequency bins
-   // This balances resolution and performance for real-time speech
-   analyser.fftSize = 256;
-   
-   // Store reference for the analysis loop
-   audioAnalyserRef.current = analyser;
-   
-   console.log('🔊 Real-time audio analysis setup complete');
-   ```
+   - **AudioContext**: Browser's audio processing engine
+   - **MediaStreamSource**: Connects Agora's audio track to WebAudio
+   - **AnalyserNode**: Performs FFT (Fast Fourier Transform) analysis
+   - **fftSize=256**: Gives us 128 frequency bins, balancing resolution and performance
 
 2. **Analyze speech frequencies in real-time**
 
@@ -455,25 +508,53 @@ Now we connect our audio analysis to the 3D avatar's facial blend shapes.
    Use React Three Fiber's `useFrame` to update morph targets every frame:
 
    ```javascript
-   // Helper to get the head mesh containing morph targets
+   // Helper to get the mesh containing morph targets
    const getMorphTargetMesh = () => {
-     return nodes.Wolf3D_Head || nodes.EyeLeft; // Different avatars may vary
+     let morphTargetMesh = null;
+     scene.traverse((child) => {
+       if (!morphTargetMesh && child.isSkinnedMesh && 
+           child.morphTargetDictionary && 
+           Object.keys(child.morphTargetDictionary).length > 0) {
+         morphTargetMesh = child;
+       }
+     });
+     return morphTargetMesh;
    };
 
-   // Smooth interpolation helper
-   const lerpMorphTarget = (target, value, speed) => {
-     const mesh = getMorphTargetMesh();
-     if (!mesh?.morphTargetDictionary) return;
+   // Smooth interpolation helper - applies to ALL SkinnedMeshes in scene
+   const lerpMorphTarget = (target, value, speed = 0.1) => {
+     scene.traverse((child) => {
+       if (child.isSkinnedMesh && child.morphTargetDictionary) {
+         const index = child.morphTargetDictionary[target];
+         if (index === undefined || 
+             child.morphTargetInfluences[index] === undefined) {
+           return;
+         }
+         child.morphTargetInfluences[index] = THREE.MathUtils.lerp(
+           child.morphTargetInfluences[index],
+           value,
+           speed
+         );
+       }
+     });
+   };
+
+   // Enhanced smooth interpolation for mouth targets with easing
+   const smoothLerpMouthTarget = (target, targetValue, deltaTime) => {
+     if (!mouthTargetValues.current[target]) {
+       mouthTargetValues.current[target] = 0;
+     }
      
-     const index = mesh.morphTargetDictionary[target];
-     if (index === undefined) return;
+     const isOpening = targetValue > mouthTargetValues.current[target];
+     const smoothSpeed = isOpening ? 15.0 : 18.0;
      
-     const current = mesh.morphTargetInfluences[index];
-     mesh.morphTargetInfluences[index] = THREE.MathUtils.lerp(
-       current,
-       value,
-       speed
+     mouthTargetValues.current[target] = THREE.MathUtils.lerp(
+       mouthTargetValues.current[target],
+       targetValue,
+       1 - Math.exp(-smoothSpeed * deltaTime)
      );
+     
+     lerpMorphTarget(target, mouthTargetValues.current[target], 0.9);
    };
 
    // Main animation loop - runs every frame (~60 FPS)
@@ -512,13 +593,13 @@ Now we connect our audio analysis to the 3D avatar's facial blend shapes.
          lerpMorphTarget(visemeTarget, intensity, 0.8);
        }
        
-       // Apply enhanced mouth shapes
+       // Apply enhanced mouth shapes with smoothLerpMouthTarget
        if (mouthShape) {
          Object.entries(mouthShape).forEach(([morphTarget, value]) => {
            const smoothedIntensity = value * smoothedAudioLevel.current * 4 * 
                                      visemeTransition.current;
            const clampedIntensity = Math.min(smoothedIntensity, value * 1.2);
-           lerpMorphTarget(morphTarget, clampedIntensity, 0.5);
+           smoothLerpMouthTarget(morphTarget, clampedIntensity, deltaTime);
            appliedMorphTargets.push(morphTarget);
          });
        }
@@ -528,9 +609,14 @@ Now we connect our audio analysis to the 3D avatar's facial blend shapes.
        const baseJawOpen = (mouthShape?.jawOpen || 0.3) + breathingVariation;
        const jawIntensity = baseJawOpen * smoothedAudioLevel.current * 3.0 * 
                            visemeTransition.current;
-       lerpMorphTarget("jawOpen", Math.min(jawIntensity, 1.0), 0.5);
+       smoothLerpMouthTarget("jawOpen", Math.min(jawIntensity, 1.0), deltaTime);
        
-       appliedMorphTargets.push("jawOpen");
+       // Mouth width variation
+       const mouthWidth = smoothedAudioLevel.current * 0.8 * visemeTransition.current;
+       smoothLerpMouthTarget("mouthLeft", mouthWidth, deltaTime);
+       smoothLerpMouthTarget("mouthRight", mouthWidth, deltaTime);
+       
+       appliedMorphTargets.push("jawOpen", "mouthLeft", "mouthRight");
      }
      
      // Reset unused morph targets smoothly
@@ -542,10 +628,13 @@ Now we connect our audio analysis to the 3D avatar's facial blend shapes.
      
      // Gentle reset to slightly open mouth when silent
      if (!lipSyncData || smoothedAudioLevel.current <= 0.01) {
-       lerpMorphTarget("jawOpen", 0.02, 0.5);
-       lerpMorphTarget("mouthOpen", 0.01, 0.5);
+       smoothLerpMouthTarget("jawOpen", 0.02, deltaTime);
+       smoothLerpMouthTarget("mouthOpen", 0.01, deltaTime);
      }
    });
+   ```
+
+   > **Note**: The actual implementation uses `smoothLerpMouthTarget` for mouth movements (with exponential easing) and `lerpMorphTarget` for visemes. See [`Avatar.jsx` lines 290-340](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/components/Avatar.jsx#L290-L340) and helper functions at [lines 493-540](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/components/Avatar.jsx#L493-L540).
    ```
 
 3. **Add facial expressions that blend with lip sync**
