@@ -58,7 +58,7 @@ To build real-time AI avatars with lip sync using Agora, you must have:
 - A valid [Agora account](https://console.agora.io/). If you don't have one, see [Get Started with Agora](https://www.agora.io/en/blog/how-to-get-started-with-agora?utm_source=medium&utm_medium=blog&utm_campaign=Build_RealTime_AI_Avatars_with_Lip_Sync_Using_Agora_ConvoAI)
 - An Agora App ID and temporary token from the [Agora Console](https://console.agora.io/)
 - Agora ConvoAI API credentials (API key and password)
-- [Node.js](https://nodejs.org/) 16+ and npm installed
+- [Node.js](https://nodejs.org/) 20+ (LTS) and npm installed
 - Basic knowledge of [JavaScript and React](https://react.dev/)
 - An [OpenAI API key](https://platform.openai.com/) or compatible LLM API
 - [Azure Speech Services API key](https://portal.azure.com/) for text-to-speech
@@ -111,9 +111,9 @@ RPM-agora-agent/
 
 You'll see the application UI with a settings button in the top-right corner. Before we can test the avatar, you need to configure your API credentials, which we'll do in the next section.
 
-## Build AI Avatar with Lip Sync
+## Understand How the AI Avatar Works
 
-Building this system involves three core modules: initializing Agora RTC with ConvoAI, implementing the WebAudio-driven lip sync engine, and integrating facial expressions. Let's build each incrementally.
+This section walks through the key components of the implementation. The system consists of three core modules: initializing Agora RTC with ConvoAI, implementing the WebAudio-driven lip sync engine, and integrating facial expressions. Each module is already implemented in the codebase—we'll examine how they work together to create the real-time AI avatar experience.
 
 ### Initialize Agora RTC and ConvoAI
 
@@ -148,11 +148,9 @@ First, we need to establish the real-time voice connection that will power our A
    await agoraClient.setClientRole('audience');
    ```
 
-   > **Note**: The actual implementation uses 'live' mode with dynamic role switching (audience → host) for optimal ConvoAI integration. See [`useAgora.jsx` lines 515-527](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx#L515-L527).
-
 3. **Join the Agora channel**
 
-   The actual implementation creates the microphone track, joins the channel, switches to host role, then publishes:
+   Create the microphone track, join the channel, and publish the audio:
 
    ```javascript
    const joinChannel = async () => {
@@ -265,16 +263,9 @@ First, we need to establish the real-time voice connection that will power our A
    };
    ```
 
-   **What happens here:**
-   - ConvoAI Engine receives this request
-   - It creates an AI agent instance with the specified UID
-   - The agent joins your Agora channel as a remote user
-   - Agent listens to audio from users (ASR → speech-to-text)
-   - Agent processes with LLM (OpenAI GPT-4)
-   - Agent responds with TTS (Azure Speech) audio
-   - The agent's audio publishes to the channel with the specified `agent_rtc_uid`
+When the ConvoAI Engine receives this request, it creates an AI agent instance with the specified UID that joins your Agora channel as a remote user. The agent listens to audio from users and converts speech to text using ASR, processes the input with the LLM (OpenAI GPT-4), generates a response, and converts it back to speech using Azure TTS. The agent's audio is then published to the channel with the specified `agent_rtc_uid`, allowing your application to receive and play the AI's voice response.
 
-   > **Note**: The actual implementation is in [`useAgora.jsx` lines 906-1020](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx#L906-L1020) with full error handling and logging.
+   > **Note**: See the complete implementation in [`useAgora.jsx` lines 906-1020](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx#L906-L1020) with full error handling and logging.
 
 5. **Subscribe to remote audio (the AI agent's voice)**
 
@@ -717,75 +708,21 @@ That's it! The complete implementation is in `src/components/Avatar.jsx`. The ke
 
 Now we have a complete system that connects to Agora RTC, analyzes AI voice with WebAudio, and renders realistic lip-synced avatars at 60 FPS.
 
-## Test AI Avatar with Lip Sync
+## Test the Application
 
-To verify your implementation works correctly:
+To test the AI avatar:
 
-1. **Start the application**
-   ```bash
-   npm run dev
-   ```
+1. Start the development server with `npm run dev`
 
-2. **Configure credentials**
-   - Click the settings (☰) button
-   - Enter all API credentials in their respective tabs
-   - Ensure Agora App ID and token are valid (tokens expire every 24 hours)
+2. Click the settings button and enter your API credentials (Agora, ConvoAI, LLM, TTS, and ASR)
 
-3. **Connect to the channel**
-   - Click the "Connect" button in the UI
-   - You should see "Connected" status in the console
-   - The avatar should load and display
+3. Click "Connect" to join the channel. The avatar should load and display.
 
-4. **Test speech-to-avatar synchronization**
-   - Speak into your microphone: "Hello, can you hear me?"
-   - The AI agent should respond with synthesized speech
-   - Observe the avatar's mouth movements:
-     - Mouth should open and close in sync with audio
-     - Different phonemes should produce different mouth shapes
-     - Transitions should be smooth, not jerky
-
-5. **Verify frequency mapping**
-   - Open browser DevTools → Console
-   - Look for log messages showing audio levels
-   - When AI speaks, you should see values > 0.01
-   - When silent, values should be near 0
-
-6. **Test expressions**
-   - Use the expression buttons in the UI
-   - Avatar should transition to new expression
-   - Lip sync should continue working on top of expression
-   - Expression should not "fight" with lip movements
-
-7. **Check performance**
-   - Open DevTools → Performance tab
-   - Record while AI is speaking
-   - Frame rate should maintain 60 FPS
-   - If dropping below 30 FPS, reduce `fftSize` to 512
-
-Common issues:
-- **Avatar mouth not moving**: Check WebAudio permissions, verify remote audio track is playing
-- **Jerky animations**: Increase `smoothingTimeConstant` to 0.5-0.8
-- **Wrong mouth shapes**: Adjust frequency bin ranges in `calculateViseme()`
-- **No audio**: Verify Agora token hasn't expired, check microphone permissions
+4. Speak into your microphone. The AI agent will respond with synthesized speech, and the avatar's mouth should move in sync with the audio.
 
 ## Next Steps
 
-You've successfully built a real-time AI avatar with lip sync powered by Agora ConvoAI! You now understand how to:
-- Integrate Agora RTC for real-time voice streaming
-- Analyze audio frequencies with WebAudio API
-- Map speech patterns to visemes
-- Animate 3D avatars with morph targets
-- Blend lip sync with facial expressions
-
-The complete source code is available on [GitHub](https://github.com/AgoraIO-Community/RPM-agora-agent).
-
-### Enhance your implementation
-
-- **Add emotion detection**: Use Agora's ConvoAI skip patterns to embed emotion markers in LLM responses and trigger expressions automatically
-- **Improve viseme accuracy**: Fine-tune frequency ranges for different languages and accents
-- **Optimize for mobile**: Reduce polygon count and texture resolution for mobile devices
-- **Add gesture system**: Extend to body animations synchronized with speech rhythm
-- **Multi-language support**: Adjust viseme mappings for non-English phonemes
+You've successfully explored how to build a real-time AI avatar with lip sync powered by Agora ConvoAI. This implementation demonstrates how to integrate Agora RTC for real-time voice streaming, analyze audio frequencies with the WebAudio API, map speech patterns to visemes, and animate 3D avatars with morph targets while blending lip sync with facial expressions. The complete source code is available on [GitHub](https://github.com/AgoraIO-Community/RPM-agora-agent), where you can explore the full implementation and experiment with your own enhancements.
 
 ### Resources
 
@@ -794,7 +731,7 @@ The complete source code is available on [GitHub](https://github.com/AgoraIO-Com
 - [ReadyPlayer.me Documentation](https://docs.readyplayer.me/)
 - [WebAudio API Guide](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
 - [Three.js Morph Targets](https://threejs.org/docs/#api/en/core/BufferGeometry.morphAttributes)
-- Join the [Agora Developer Community](https://www.agora.io/en/join-slack/)
+- Join the [Agora Developer Community](https://discord.gg/uhkxjDpJsN)
 
 ---
 
