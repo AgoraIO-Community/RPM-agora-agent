@@ -128,7 +128,15 @@ const mouthMorphTargets = {
 
 let setupMode = false;
 
-export function Avatar({ currentExpression, currentAnimation, currentAvatar = "Aurora", ...props }) {
+export function Avatar({ 
+  currentExpression, 
+  currentAnimation, 
+  currentAvatar = "Aurora",
+  manualBlendShapes = null,
+  manualViseme = null,
+  showWireframe = false,
+  ...props 
+}) {
   // Define available avatars
   const availableAvatars = {
     Aurora: "Aurora.glb",
@@ -259,6 +267,38 @@ export function Avatar({ currentExpression, currentAnimation, currentAvatar = "A
     };
   }, [currentAvatar, animations, scene]);
   
+  // Apply visualization mode (wireframe)
+  useEffect(() => {
+    if (!scene) return;
+    
+    // Apply wireframe mode to all meshes
+    scene.traverse((child) => {
+      if (child.isMesh || child.isSkinnedMesh) {
+        if (child.material) {
+          // Handle both single material and array of materials
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach(mat => {
+            mat.wireframe = showWireframe;
+          });
+        }
+      }
+    });
+    
+    return () => {
+      // Cleanup: restore materials when component unmounts
+      scene.traverse((child) => {
+        if (child.isMesh || child.isSkinnedMesh) {
+          if (child.material) {
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach(mat => {
+              mat.wireframe = false;
+            });
+          }
+        }
+      });
+    };
+  }, [showWireframe, scene]);
+  
   // Update animation mixer on each frame and handle facial expressions
   useFrame((state, deltaTime) => {
     // Update custom animation mixer
@@ -288,6 +328,30 @@ export function Avatar({ currentExpression, currentAnimation, currentAvatar = "A
     // LIPSYNC - WebAudio based with smooth interpolation
     if (setupMode) {
       return;
+    }
+
+    // Apply manual blend shapes if provided (from BlendShapeController)
+    if (manualBlendShapes) {
+      Object.entries(manualBlendShapes).forEach(([shapeName, value]) => {
+        lerpMorphTarget(shapeName, value, 0.2);
+      });
+    }
+
+    // Apply manual viseme if provided (from BlendShapeController)
+    if (manualViseme) {
+      const visemeTarget = corresponding[manualViseme];
+      if (visemeTarget) {
+        lerpMorphTarget(visemeTarget, 1.0, 0.2);
+      }
+      
+      // Apply corresponding mouth shape for the viseme
+      const mouthShape = mouthMorphTargets[manualViseme];
+      if (mouthShape) {
+        Object.entries(mouthShape).forEach(([morphTarget, value]) => {
+          lerpMorphTarget(morphTarget, value, 0.2);
+        });
+      }
+      return; // Skip automatic lip sync when manual control is active
     }
 
     // Smooth the audio level to reduce jittering but keep it responsive

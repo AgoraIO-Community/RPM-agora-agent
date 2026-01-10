@@ -5,7 +5,20 @@ import Settings from "./Settings";
 import { CombinedChat } from "./CombinedChat";
 import AgoraProductsPanel from "./AgoraProductsPanel";
 
-export const UI = ({ hidden, currentExpression, setCurrentExpression, currentAnimation, setCurrentAnimation, currentAvatar, setCurrentAvatar, ...props }) => {
+export const UI = ({ 
+  hidden, 
+  currentExpression, 
+  setCurrentExpression, 
+  currentAnimation, 
+  setCurrentAnimation, 
+  currentAvatar, 
+  setCurrentAvatar, 
+  showBlendShapeController, 
+  setShowBlendShapeController,
+  showWireframe,
+  setShowWireframe,
+  ...props 
+}) => {
   const [showSettings, setShowSettings] = useState(false);
   
   // Panel visibility states - Combined animation panel
@@ -181,6 +194,23 @@ export const UI = ({ hidden, currentExpression, setCurrentExpression, currentAni
                         <div className="text-xs leading-tight">{avatar.name}</div>
                       </button>
                     ))}
+                  </div>
+                  
+                  {/* Visualization Modes */}
+                  <div className="mt-3 pt-3 border-t border-gray-300">
+                    <p className="text-xs text-gray-600 mb-2">🔍 Visualization:</p>
+                    <button
+                      onClick={() => setShowWireframe(!showWireframe)}
+                      className={`pointer-events-auto w-full px-3 py-2 rounded text-xs font-medium transition-all ${
+                        showWireframe
+                          ? "bg-green-500 text-white shadow-md" 
+                          : "bg-white bg-opacity-70 text-gray-700 hover:bg-green-100"
+                      }`}
+                      title="Toggle wireframe/mesh view"
+                    >
+                      <span className="mr-1">{showWireframe ? "✅" : "⬜"}</span>
+                      Wireframe Mode
+                    </button>
                   </div>
                 </div>
                 
@@ -359,8 +389,34 @@ export const UI = ({ hidden, currentExpression, setCurrentExpression, currentAni
             </div>
           </div>
           
-          {/* Settings Button */}
+          {/* Settings and Blend Shape Controller Buttons */}
           <div className="flex gap-2">
+            {/* Blend Shape Controller Toggle Button */}
+            <button
+              onClick={() => setShowBlendShapeController(!showBlendShapeController)}
+              className={`pointer-events-auto backdrop-blur-md p-3 rounded-lg transition-colors ${
+                showBlendShapeController 
+                  ? 'bg-purple-500 bg-opacity-80 hover:bg-opacity-90' 
+                  : 'bg-white bg-opacity-50 hover:bg-opacity-70'
+              }`}
+              title={showBlendShapeController ? "Hide Blend Shape Controller" : "Show Blend Shape Controller"}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className={`w-6 h-6 ${showBlendShapeController ? 'text-white' : 'text-gray-700'}`}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                />
+              </svg>
+            </button>
+            
             {/* Settings Button (Burger Menu) */}
             <button
               onClick={() => setShowSettings(true)}
