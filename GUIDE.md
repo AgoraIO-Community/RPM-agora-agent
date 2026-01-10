@@ -56,7 +56,7 @@ This approach delivers convincing lip sync without machine learning models, pre-
 To build real-time AI avatars with lip sync using Agora, you must have:
 
 - A valid [Agora account](https://console.agora.io/). If you don't have one, see [Get Started with Agora](https://www.agora.io/en/blog/how-to-get-started-with-agora?utm_source=medium&utm_medium=blog&utm_campaign=Build_RealTime_AI_Avatars_with_Lip_Sync_Using_Agora_ConvoAI)
-- An Agora App ID and temporary token from the [Agora Console](https://console.agora.io/)
+- An Agora App ID and temporary token from the [Agora Console](https://console.agora.io/restful-api)
 - Agora ConvoAI API credentials (API key and password)
 - [Node.js](https://nodejs.org/) 20+ (LTS) and npm installed
 - Basic knowledge of [JavaScript and React](https://react.dev/)
@@ -133,7 +133,7 @@ First, we need to establish the real-time voice connection that will power our A
 
 2. **Initialize the Agora RTC client**
 
-   In `src/hooks/useAgora.jsx`, the client is created in 'live' mode with initial 'audience' role:
+   In `src/hooks/useAgora.jsx`, the client is created in 'live' mode with initial 'audience' role: This is done to have the ConvoAI Agent start starting to the user with no delay, initially the Agent starts talking and the user is just listening. You only need 'Host' mode for the user when the user wnats to talk to the Agent as well.
 
    ```javascript
    import AgoraRTC from "agora-rtc-sdk-ng";
@@ -150,7 +150,7 @@ First, we need to establish the real-time voice connection that will power our A
 
 3. **Join the Agora channel**
 
-   Create the microphone track, join the channel, and publish the audio:
+   Create the microphone track, join the channel, and publish the audio: Here when the users is ready to publish, we now chang the users role from 'audience' that we used initially, to 'host' role, that way the user can now puiblish audio into the channle for the SST -> LLM to kick in.
 
    ```javascript
    const joinChannel = async () => {
@@ -189,7 +189,7 @@ First, we need to establish the real-time voice connection that will power our A
 
 4. **Start the ConvoAI Agent to join the channel**
 
-   This is the critical step that makes the AI agent join the same Agora channel. We call the ConvoAI REST API:
+   This is the critical step that makes the AI agent join the same Agora channel. We call the ConvoAI REST API: The demo lets you save the connection configurations as part of bring your own keys, to local environment variables once added in the settings menu, thery are split into 'agoraConfig' related to the RESTFUL API access, and 'convoaiConfig' that are related to the ASR/STT, LLM, and TTS settings need to initiate ConvoAI restful API. 
 
    ```javascript
    const startConvoAIAgent = async () => {
@@ -269,7 +269,7 @@ When the ConvoAI Engine receives this request, it creates an AI agent instance w
 
 5. **Subscribe to remote audio (the AI agent's voice)**
 
-   The event handler subscribes to the remote user and sets up lip sync if it's the ConvoAI agent:
+   The event handler subscribes to the remote user and sets up lip sync if it's the ConvoAI agent: Since the Agent is hosted in the Agora cloud, it does join like any oher remote users with a UID and joins the channle usihg the credentials we pass, and the human users need to subscribe to the Agent UID, here we check if the media type is Audio, and is the UID matches the AgentID we have given as part of the Start API call, if so we play, and create a mediaStreamTrack that is used to create audiocontext, where the WebAudio based analysis is pwrformed.  
 
    ```javascript
    agoraClient.on('user-published', async (user, mediaType) => {
@@ -325,7 +325,18 @@ At this point, you have the core Agora RTC connection established. The complete 
 
 This is where the magic happens. We'll use WebAudio API to analyze the AI agent's voice in real-time and map it to mouth movements.
 
-> **Note**: The code examples below are simplified for clarity, removing verbose logging and debug statements. The complete implementation with full error handling and logging can be found in [`src/hooks/useAgora.jsx`](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx) (lines 580-700).
+> **Note**: The code examples below are simplified for clarity, removing verbose logging and debug statements. The complete implementation with full error handling and logging can be found in [`src/hooks/useAgora.jsx`](https://github.com/AgoraIO-Community/RPM-agora-agent/blob/main/src/hooks/useAgora.jsx) 
+
+The complete lip sync data object now contains:
+   - `viseme`: Letter code (A-X) representing the current phoneme
+   - `mouthOpen`: 0-1 value for jaw opening
+   - `mouthSmile`: Subtle smile during speech
+   - `jawOpen`: Jaw movement (70% of mouth open)
+   - `audioLevel`: Overall volume level
+   - `frequencies`: Raw frequency data for debugging
+
+This data updates at ~60 FPS via requestAnimationFrame, providing smooth real-time lip sync. Next, we'll connect this to the 3D avatar to visualize the results.
+
 
 1. **WebAudio analyzer setup (from previous section)**
 
@@ -418,15 +429,6 @@ This is where the magic happens. We'll use WebAudio API to analyze the AI agent'
    });
    ```
 
-The complete lip sync data object now contains:
-   - `viseme`: Letter code (A-X) representing the current phoneme
-   - `mouthOpen`: 0-1 value for jaw opening
-   - `mouthSmile`: Subtle smile during speech
-   - `jawOpen`: Jaw movement (70% of mouth open)
-   - `audioLevel`: Overall volume level
-   - `frequencies`: Raw frequency data for debugging
-
-This data updates at ~60 FPS via requestAnimationFrame, providing smooth real-time lip sync. Next, we'll connect this to the 3D avatar to visualize the results.
 
 ### Integrate Avatar and Apply Morph Targets
 
