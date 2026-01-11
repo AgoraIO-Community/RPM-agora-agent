@@ -43,7 +43,10 @@ export const Experience = ({
   currentAvatar,
   manualBlendShapes,
   manualViseme,
-  showWireframe
+  visualizerViseme,
+  visualizerAudioLevel,
+  showWireframe,
+  showVertices
 }) => {
   const cameraControls = useRef();
   const { cameraZoomed } = useChat();
@@ -75,7 +78,10 @@ export const Experience = ({
           currentAvatar={currentAvatar}
           manualBlendShapes={manualBlendShapes}
           manualViseme={manualViseme}
+          visualizerViseme={visualizerViseme}
+          visualizerAudioLevel={visualizerAudioLevel}
           showWireframe={showWireframe}
+          showVertices={showVertices}
         />
       </Suspense>
       <ContactShadows opacity={0.7} />

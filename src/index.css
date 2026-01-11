@@ -22,3 +22,22 @@ body.greenScreen {
   background-color: #00ff00;
   background-image: none;
 }
+
+/* Visualizer scrollbar styles */
+.visualizer-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.visualizer-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+}
+
+.visualizer-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #2563eb, #0891b2);
+  border-radius: 10px;
+}
+
+.visualizer-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #1d4ed8, #0e7490);
+}

@@ -10,17 +10,23 @@ export const BlendShapeController = ({
   onVisemeSelect,
   isVisible = true 
 }) => {
-  // Viseme options (phoneme shapes)
+  // Oculus/Meta Quest viseme options
   const visemeOptions = [
-    { code: 'A', label: 'viseme_PP (P, B, M)', phoneme: 'PP' },
-    { code: 'B', label: 'viseme_kk (K, G)', phoneme: 'kk' },
-    { code: 'C', label: 'viseme_I (I, EE)', phoneme: 'I' },
-    { code: 'D', label: 'viseme_AA (A, AH)', phoneme: 'AA' },
-    { code: 'E', label: 'viseme_O (O, OH)', phoneme: 'O' },
-    { code: 'F', label: 'viseme_U (U, OO)', phoneme: 'U' },
-    { code: 'G', label: 'viseme_FF (F, V)', phoneme: 'FF' },
-    { code: 'H', label: 'viseme_TH (TH)', phoneme: 'TH' },
-    { code: 'X', label: 'Silence / Rest', phoneme: 'Silent' },
+    { code: 'viseme_sil', label: 'Silence / Rest', phoneme: 'Silent' },
+    { code: 'viseme_PP', label: 'viseme_PP (P, B, M)', phoneme: 'PP' },
+    { code: 'viseme_FF', label: 'viseme_FF (F, V)', phoneme: 'FF' },
+    { code: 'viseme_TH', label: 'viseme_TH (TH)', phoneme: 'TH' },
+    { code: 'viseme_DD', label: 'viseme_DD (D, T, N, L)', phoneme: 'DD' },
+    { code: 'viseme_kk', label: 'viseme_kk (K, G)', phoneme: 'kk' },
+    { code: 'viseme_CH', label: 'viseme_CH (CH, J, SH)', phoneme: 'CH' },
+    { code: 'viseme_SS', label: 'viseme_SS (S, Z)', phoneme: 'SS' },
+    { code: 'viseme_nn', label: 'viseme_nn (N, NG)', phoneme: 'nn' },
+    { code: 'viseme_RR', label: 'viseme_RR (R)', phoneme: 'RR' },
+    { code: 'viseme_aa', label: 'viseme_aa (AA - father)', phoneme: 'aa' },
+    { code: 'viseme_E', label: 'viseme_E (EH - bed)', phoneme: 'E' },
+    { code: 'viseme_I', label: 'viseme_I (EE - see)', phoneme: 'I' },
+    { code: 'viseme_O', label: 'viseme_O (OH - go)', phoneme: 'O' },
+    { code: 'viseme_U', label: 'viseme_U (OO - boot)', phoneme: 'U' },
   ];
 
   // Common ARKit blend shapes

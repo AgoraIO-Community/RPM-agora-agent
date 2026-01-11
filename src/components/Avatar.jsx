@@ -97,34 +97,35 @@ const corresponding = {
   A: "viseme_PP",
   B: "viseme_kk",
   C: "viseme_I",
-  D: "viseme_AA",
+  D: "viseme_aa",
   E: "viseme_O",
   F: "viseme_U",
   G: "viseme_FF",
   H: "viseme_TH",
-  X: "viseme_PP",
+  X: "viseme_sil",
 };
 
-// Enhanced mouth morph targets for more realistic speech
-const mouthMorphTargets = {
-  // Vowel sounds - wider mouth shapes
-  A: { jawOpen: 0.7, mouthOpen: 0.8, mouthWide: 0.5 },
-  E: { jawOpen: 0.4, mouthOpen: 0.6, mouthWide: 0.7, mouthSmileLeft: 0.3, mouthSmileRight: 0.3 },
-  I: { jawOpen: 0.2, mouthOpen: 0.3, mouthWide: 0.8, mouthSmileLeft: 0.5, mouthSmileRight: 0.5 },
-  O: { jawOpen: 0.5, mouthOpen: 0.7, mouthFunnel: 0.6, mouthPucker: 0.4 },
-  U: { jawOpen: 0.3, mouthOpen: 0.4, mouthFunnel: 0.8, mouthPucker: 0.7 },
-  
-  // Consonant sounds
-  B: { mouthPressLeft: 0.8, mouthPressRight: 0.8, mouthClose: 0.9 },
-  C: { jawOpen: 0.2, mouthOpen: 0.3 },
-  D: { jawOpen: 0.3, mouthOpen: 0.4, tongueOut: 0.2 },
-  F: { jawOpen: 0.1, mouthOpen: 0.2, mouthFunnel: 0.3 },
-  G: { jawOpen: 0.4, mouthOpen: 0.5 },
-  H: { jawOpen: 0.3, mouthOpen: 0.4 },
-  
-  // Default/silence
-  X: { jawOpen: 0.05, mouthOpen: 0.1 }
-};
+// Oculus/Meta Quest viseme blend shapes - use them directly!
+// These are the actual blend shape names on the avatar
+const oculusVisemes = [
+  'viseme_sil',  // silence
+  'viseme_PP',   // p, b, m
+  'viseme_FF',   // f, v
+  'viseme_TH',   // th
+  'viseme_DD',   // d, t, n, l
+  'viseme_kk',   // k, g
+  'viseme_CH',   // ch, j, sh
+  'viseme_SS',   // s, z
+  'viseme_nn',   // n, ng
+  'viseme_RR',   // r
+  'viseme_aa',   // aa (father)
+  'viseme_E',    // eh (bed)
+  'viseme_I',    // ee (see)
+  'viseme_O',    // oh (go)
+  'viseme_U',    // oo (boot)
+];
+
+// No need for mouthMorphTargets - we'll use the viseme blend shapes directly!
 
 let setupMode = false;
 
@@ -134,6 +135,8 @@ export function Avatar({
   currentAvatar = "Aurora",
   manualBlendShapes = null,
   manualViseme = null,
+  visualizerViseme = null,
+  visualizerAudioLevel = 0,
   showWireframe = false,
   ...props 
 }) {
@@ -231,6 +234,17 @@ export function Avatar({
         
         // Create new animation mixer
         animationMixer.current = new THREE.AnimationMixer(animationTarget);
+        
+        // Suppress PropertyBinding warnings for missing nodes
+        animationMixer.current.addEventListener('loop', () => {});
+        const originalWarn = console.warn;
+        console.warn = (...args) => {
+          if (args[0]?.includes?.('PropertyBinding') || args[0]?.includes?.('trying to update node')) {
+            return; // Suppress PropertyBinding warnings
+          }
+          originalWarn.apply(console, args);
+        };
+        
         animationActions.current = {};
         
         // Create actions for all animations
@@ -246,6 +260,9 @@ export function Avatar({
             console.warn(`❌ Failed to create action for ${clip.name}:`, error.message);
           }
         });
+        
+        // Restore console.warn
+        console.warn = originalWarn;
         
         console.log(`🎬 Animation setup complete: ${successCount}/${animations.length} actions created for ${currentAvatar}`);
         console.log('Available actions:', Object.keys(animationActions.current));
@@ -267,15 +284,13 @@ export function Avatar({
     };
   }, [currentAvatar, animations, scene]);
   
-  // Apply visualization mode (wireframe)
+  // Apply wireframe mode to all meshes
   useEffect(() => {
     if (!scene) return;
     
-    // Apply wireframe mode to all meshes
     scene.traverse((child) => {
       if (child.isMesh || child.isSkinnedMesh) {
         if (child.material) {
-          // Handle both single material and array of materials
           const materials = Array.isArray(child.material) ? child.material : [child.material];
           materials.forEach(mat => {
             mat.wireframe = showWireframe;
@@ -285,7 +300,6 @@ export function Avatar({
     });
     
     return () => {
-      // Cleanup: restore materials when component unmounts
       scene.traverse((child) => {
         if (child.isMesh || child.isSkinnedMesh) {
           if (child.material) {
@@ -339,72 +353,45 @@ export function Avatar({
 
     // Apply manual viseme if provided (from BlendShapeController)
     if (manualViseme) {
-      const visemeTarget = corresponding[manualViseme];
-      if (visemeTarget) {
-        lerpMorphTarget(visemeTarget, 1.0, 0.2);
-      }
+      // Manual viseme now comes as Oculus viseme name directly (e.g., 'viseme_aa', 'viseme_I')
+      lerpMorphTarget(manualViseme, 1.0, 0.2);
       
-      // Apply corresponding mouth shape for the viseme
-      const mouthShape = mouthMorphTargets[manualViseme];
-      if (mouthShape) {
-        Object.entries(mouthShape).forEach(([morphTarget, value]) => {
-          lerpMorphTarget(morphTarget, value, 0.2);
-        });
-      }
+      // Add slight jaw movement for natural look
+      lerpMorphTarget("jawOpen", 0.4, 0.2);
+      
       return; // Skip automatic lip sync when manual control is active
     }
 
-    // Smooth the audio level to reduce jittering but keep it responsive
-    const targetAudioLevel = audioLevel || 0;
-    smoothedAudioLevel.current = THREE.MathUtils.lerp(
-      smoothedAudioLevel.current,
-      targetAudioLevel,
-      1 - Math.exp(-15 * deltaTime) // Faster response for more visible changes
-    );
-
     const appliedMorphTargets = [];
     
-    // Use WebAudio lip sync data if available
-    if (lipSyncData && lipSyncData.viseme && smoothedAudioLevel.current > 0.01) {
-      const currentViseme = lipSyncData.viseme;
-      const visemeTarget = corresponding[currentViseme];
-      const mouthShape = mouthMorphTargets[currentViseme];
+    // Priority: 1. Visualizer viseme, 2. WebAudio lip sync data
+    const activeViseme = visualizerViseme || (lipSyncData && lipSyncData.viseme);
+    // Use raw audio levels for both - no smoothing for more responsive movement
+    const activeAudioLevel = visualizerAudioLevel > 0 ? visualizerAudioLevel : (audioLevel || 0);
+    
+    if (activeViseme && activeAudioLevel > 0.01) {
+      // For Oculus visemes, apply the blend shape directly!
+      // The viseme name IS the blend shape name
+      const visemeBlendShape = activeViseme; // e.g., 'viseme_aa', 'viseme_I', etc.
       
-      // Handle viseme transitions more quickly
-      if (lastViseme.current !== currentViseme) {
+      // Handle viseme transitions smoothly
+      if (lastViseme.current !== activeViseme) {
         visemeTransition.current = 0;
-        lastViseme.current = currentViseme;
+        lastViseme.current = activeViseme;
       }
-      visemeTransition.current = Math.min(visemeTransition.current + deltaTime * 12, 1); // Doubled transition speed
+      visemeTransition.current = Math.min(visemeTransition.current + deltaTime * 20, 1); // Very fast transitions for natural speech
       
-      if (visemeTarget) {
-        appliedMorphTargets.push(visemeTarget);
-        const intensity = Math.min(smoothedAudioLevel.current * 2.0, 1.0) * visemeTransition.current; // Doubled intensity
-        lerpMorphTarget(visemeTarget, intensity, 0.8);
+      // Apply the viseme blend shape directly with higher intensity for visibility
+      const intensity = Math.min(activeAudioLevel * 4.0, 1.0) * visemeTransition.current; // Increased from 2.5 to 4.0
+      lerpMorphTarget(visemeBlendShape, intensity, 0.5); // Faster lerp (0.7->0.5) for responsiveness
+      appliedMorphTargets.push(visemeBlendShape);
+      
+      // Add more pronounced jaw movement for natural speech
+      const jawAmount = activeAudioLevel * 0.8 * visemeTransition.current; // Increased from 0.5 to 0.8
+      if (jawAmount > 0.03) {
+        lerpMorphTarget("jawOpen", Math.min(jawAmount, 0.8), 0.5); // Allow up to 0.8 jaw opening
+        appliedMorphTargets.push("jawOpen");
       }
-      
-      // Apply enhanced mouth shapes with smooth interpolation and higher intensity
-      if (mouthShape) {
-        Object.entries(mouthShape).forEach(([morphTarget, value]) => {
-          const smoothedIntensity = value * smoothedAudioLevel.current * 4 * visemeTransition.current; // Quadrupled intensity
-          const clampedIntensity = Math.min(smoothedIntensity, value * 1.2); // Allow slightly over the base value
-          smoothLerpMouthTarget(morphTarget, clampedIntensity, deltaTime);
-          appliedMorphTargets.push(morphTarget);
-        });
-      }
-      
-      // More pronounced jaw movement
-      const breathingVariation = Math.sin(state.clock.elapsedTime * 2) * 0.1;
-      const baseJawOpen = (mouthShape?.jawOpen || 0.3) + breathingVariation;
-      const jawIntensity = baseJawOpen * smoothedAudioLevel.current * 3.0 * visemeTransition.current; // Tripled intensity
-      smoothLerpMouthTarget("jawOpen", Math.min(jawIntensity, 1.0), deltaTime);
-      
-      // More visible mouth width variation
-      const mouthWidth = smoothedAudioLevel.current * 0.8 * visemeTransition.current; // Doubled width
-      smoothLerpMouthTarget("mouthLeft", mouthWidth, deltaTime);
-      smoothLerpMouthTarget("mouthRight", mouthWidth, deltaTime);
-      
-      appliedMorphTargets.push("jawOpen", "mouthLeft", "mouthRight");
     }
     // Fallback to original message-based lip sync with smoothing
     else if (message && lipsync) {

@@ -15,6 +15,8 @@ export const UI = ({
   setCurrentAvatar, 
   showBlendShapeController, 
   setShowBlendShapeController,
+  showVisualizer,
+  setShowVisualizer,
   showWireframe,
   setShowWireframe,
   ...props 
@@ -389,8 +391,34 @@ export const UI = ({
             </div>
           </div>
           
-          {/* Settings and Blend Shape Controller Buttons */}
+          {/* Settings, Visualizer and Blend Shape Controller Buttons */}
           <div className="flex gap-2">
+            {/* Audio Visualizer Toggle Button */}
+            <button
+              onClick={() => setShowVisualizer(!showVisualizer)}
+              className={`pointer-events-auto backdrop-blur-md p-3 rounded-lg transition-colors ${
+                showVisualizer 
+                  ? 'bg-blue-500 bg-opacity-80 hover:bg-opacity-90' 
+                  : 'bg-white bg-opacity-50 hover:bg-opacity-70'
+              }`}
+              title={showVisualizer ? "Hide Audio Visualizer" : "Show Audio Visualizer"}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className={`w-6 h-6 ${showVisualizer ? 'text-white' : 'text-gray-700'}`}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z"
+                />
+              </svg>
+            </button>
+            
             {/* Blend Shape Controller Toggle Button */}
             <button
               onClick={() => setShowBlendShapeController(!showBlendShapeController)}

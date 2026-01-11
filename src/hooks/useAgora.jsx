@@ -195,6 +195,163 @@ const testBasicAuthCredentials = () => {
   }
 };
 
+// Lip Sync Manager for audio analysis
+class LipsyncManager {
+  constructor() {
+    this.audioContext = null;
+    this.analyser = null;
+    this.source = null;
+    this.dataArray = null;
+    this.viseme = 'viseme_PP';
+    this.features = { volume: 0, centroid: 0, bands: [] };
+    this.isProcessing = false;
+    this.connectedElement = null;
+  }
+
+  connectAudio(audioElement) {
+    try {
+      if (!audioElement) {
+        console.warn('⚠️ No audio element provided to lipsyncManager');
+        return;
+      }
+
+      // If this is the same element, don't reconnect
+      if (this.connectedElement === audioElement && this.audioContext && this.source) {
+        console.log('🔄 Reusing existing audio connection');
+        this.isProcessing = true;
+        return;
+      }
+
+      // Disconnect previous source if exists
+      if (this.source) {
+        try {
+          this.source.disconnect();
+        } catch (e) {
+          // Ignore disconnect errors
+        }
+        this.source = null;
+      }
+
+      // Create audio context if it doesn't exist or is closed
+      if (!this.audioContext || this.audioContext.state === 'closed') {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      // Resume context if suspended
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+
+      // Create analyser if it doesn't exist
+      if (!this.analyser) {
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 256;
+        this.analyser.smoothingTimeConstant = 0.8;
+      }
+
+      // Create source and connect - only if not already connected
+      if (!audioElement._audioSourceConnected) {
+        this.source = this.audioContext.createMediaElementSource(audioElement);
+        this.source.connect(this.analyser);
+        this.analyser.connect(this.audioContext.destination);
+        audioElement._audioSourceConnected = true;
+      } else {
+        // Element already connected, just reconnect to analyser
+        console.log('🔗 Audio element already has source, reusing connection');
+      }
+
+      // Initialize data array
+      this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+      
+      this.connectedElement = audioElement;
+      this.isProcessing = true;
+      console.log('✅ LipsyncManager connected to audio element');
+    } catch (error) {
+      console.error('❌ LipsyncManager connection error:', error);
+      // If connection fails, try to reset and reconnect with a fresh element
+      this.disconnect();
+    }
+  }
+
+  processAudio() {
+    if (!this.analyser || !this.dataArray || !this.isProcessing) {
+      return;
+    }
+
+    try {
+      this.analyser.getByteFrequencyData(this.dataArray);
+
+      // Calculate volume
+      const average = this.dataArray.reduce((sum, value) => sum + value, 0) / this.dataArray.length;
+      const volume = average / 255;
+
+      // Calculate spectral centroid
+      let weightedSum = 0;
+      let sum = 0;
+      for (let i = 0; i < this.dataArray.length; i++) {
+        const freq = i * (this.audioContext.sampleRate / 2) / this.dataArray.length;
+        weightedSum += freq * this.dataArray[i];
+        sum += this.dataArray[i];
+      }
+      const centroid = sum > 0 ? weightedSum / sum : 0;
+
+      // Create frequency bands for visualization
+      const numBands = 8;
+      const bandsArray = [];
+      const bandSize = Math.floor(this.dataArray.length / numBands);
+      for (let i = 0; i < numBands; i++) {
+        const start = i * bandSize;
+        const end = start + bandSize;
+        const bandAvg = this.dataArray.slice(start, end).reduce((sum, val) => sum + val, 0) / bandSize;
+        bandsArray.push(bandAvg / 255);
+      }
+
+      // Detect viseme based on frequency analysis
+      let currentViseme = 'viseme_PP';
+      if (volume > 0.01) {
+        const lowFreq = this.dataArray.slice(0, 15).reduce((sum, val) => sum + val, 0) / 15;
+        const midFreq = this.dataArray.slice(15, 60).reduce((sum, val) => sum + val, 0) / 45;
+        const highFreq = this.dataArray.slice(60, 100).reduce((sum, val) => sum + val, 0) / 40;
+
+        if (highFreq > midFreq && highFreq > lowFreq) {
+          currentViseme = Math.random() > 0.5 ? 'viseme_I' : 'viseme_TH';
+        } else if (lowFreq > midFreq && lowFreq > highFreq) {
+          currentViseme = Math.random() > 0.5 ? 'viseme_O' : 'viseme_U';
+        } else if (midFreq > 20) {
+          currentViseme = Math.random() > 0.5 ? 'viseme_AA' : 'viseme_PP';
+        } else {
+          currentViseme = Math.random() > 0.5 ? 'viseme_kk' : 'viseme_FF';
+        }
+      }
+
+      this.viseme = currentViseme;
+      this.features = { volume, centroid, bands: bandsArray };
+    } catch (error) {
+      console.error('❌ LipsyncManager processAudio error:', error);
+    }
+  }
+
+  disconnect() {
+    this.isProcessing = false;
+    if (this.source) {
+      try {
+        this.source.disconnect();
+      } catch (e) {
+        // Ignore
+      }
+      this.source = null;
+    }
+    // Don't close the audio context, keep it for reuse
+    // Just reset the connection tracking
+    this.connectedElement = null;
+    this.viseme = 'viseme_PP';
+    this.features = { volume: 0, centroid: 0, bands: [] };
+  }
+}
+
+// Export singleton instance
+export const lipsyncManager = new LipsyncManager();
+
 export const AgoraProvider = ({ children }) => {
   const [client, setClient] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
@@ -603,7 +760,7 @@ export const AgoraProvider = ({ children }) => {
               
               console.log('🔊 Real-time audio analysis setup complete, starting ConvoAI lip sync...');
               
-              // Start real-time audio analysis optimized for ConvoAI speech
+              // Start real-time audio analysis with Oculus viseme detection
               const analyzeAudio = () => {
                 if (audioAnalyserRef.current) {
                   const dataArray = new Uint8Array(audioAnalyserRef.current.frequencyBinCount);
@@ -615,48 +772,66 @@ export const AgoraProvider = ({ children }) => {
                   
                   setAudioLevel(normalizedLevel);
                   
-                  // Generate enhanced viseme-based lip sync data for real-time speech
-                  let viseme = 'X'; // Default closed mouth
-                  let mouthOpen = 0;
-                  let mouthSmile = 0;
+                  // Oculus/Meta Quest viseme detection based on formant analysis
+                  // Returns actual Oculus viseme blend shape names
+                  let viseme = 'viseme_sil'; // Default silence
                   
-                  if (normalizedLevel > 0.01) {
-                    // Analyze frequency ranges for more realistic viseme detection
-                    const lowFreq = dataArray.slice(0, 15).reduce((sum, val) => sum + val, 0) / 15;
-                    const midFreq = dataArray.slice(15, 60).reduce((sum, val) => sum + val, 0) / 45;
-                    const highFreq = dataArray.slice(60, 100).reduce((sum, val) => sum + val, 0) / 40;
+                  if (normalizedLevel > 0.02) {
+                    // Calculate energy in specific frequency bands (formants)
+                    const f1 = dataArray.slice(0, 8).reduce((sum, val) => sum + val, 0) / 8;    // ~300Hz
+                    const f2 = dataArray.slice(8, 20).reduce((sum, val) => sum + val, 0) / 12;  // ~600Hz  
+                    const f3 = dataArray.slice(20, 40).reduce((sum, val) => sum + val, 0) / 20; // ~1200Hz
+                    const f4 = dataArray.slice(40, 70).reduce((sum, val) => sum + val, 0) / 30; // ~2000Hz
+                    const highF = dataArray.slice(70, 110).reduce((sum, val) => sum + val, 0) / 40; // ~3500Hz
                     
-                    // Enhanced viseme detection based on frequency characteristics
-                    if (normalizedLevel > 0.15) {
-                      if (highFreq > midFreq && highFreq > lowFreq) {
-                        // High frequency dominant - likely 'ee', 'ih', 's', 'sh' sounds
-                        viseme = Math.random() > 0.5 ? 'C' : 'H'; // viseme_I or viseme_TH
-                      } else if (lowFreq > midFreq && lowFreq > highFreq) {
-                        // Low frequency dominant - likely 'oh', 'oo', 'ow' sounds  
-                        viseme = Math.random() > 0.5 ? 'E' : 'F'; // viseme_O or viseme_U
-                      } else if (midFreq > 20) {
-                        // Mid frequency dominant - likely 'ah', 'ay', 'eh' sounds
-                        viseme = Math.random() > 0.5 ? 'D' : 'A'; // viseme_AA or viseme_PP
+                    const totalEnergy = f1 + f2 + f3 + f4 + highF;
+                    
+                    if (totalEnergy > 10) {
+                      // Normalize formant energies
+                      const nf1 = f1 / totalEnergy;
+                      const nf2 = f2 / totalEnergy;
+                      const nf3 = f3 / totalEnergy;
+                      const nf4 = f4 / totalEnergy;
+                      const nhighF = highF / totalEnergy;
+                      
+                      // Vowel detection based on formant patterns
+                      if (nf1 > 0.25 && nf2 < 0.2) {
+                        // Strong F1, weak F2 = 'aa' sound (father, hot)
+                        viseme = 'viseme_aa';
+                      } else if (nf2 > 0.25 && nhighF > 0.2) {
+                        // Strong F2 and high frequencies = 'ee' sound (see, eat)
+                        viseme = 'viseme_I';
+                      } else if (nf1 > 0.2 && nf2 > 0.2) {
+                        // Balanced F1 and F2 = 'eh' sound (bed, head)
+                        viseme = 'viseme_E';
+                      } else if (nf1 < 0.15 && nf2 < 0.2 && nhighF > 0.25) {
+                        // Weak F1/F2, strong high = 'oo' sound (boot, food)
+                        viseme = 'viseme_U';
+                      } else if (nf1 < 0.2 && nf2 > 0.2 && nf3 > 0.2) {
+                        // Weak F1, strong F2/F3 = 'oh' sound (go, show)
+                        viseme = 'viseme_O';
+                      } else if (nhighF > 0.35) {
+                        // High frequency sibilants
+                        viseme = Math.random() > 0.5 ? 'viseme_SS' : 'viseme_CH'; // s/z or sh/ch
+                      } else if (nhighF > 0.25) {
+                        // Fricatives (f, v, th)
+                        viseme = Math.random() > 0.5 ? 'viseme_FF' : 'viseme_TH';
+                      } else if (nf1 < 0.15 && nf2 < 0.2 && nhighF < 0.2) {
+                        // Closed consonants (p, b, m)
+                        viseme = 'viseme_PP';
+                      } else if (nf2 < 0.2 && nf3 > 0.2) {
+                        // Back consonants (k, g)
+                        viseme = 'viseme_kk';
                       } else {
-                        // Consonants - 'p', 'b', 'm', 'k', 'g'
-                        viseme = Math.random() > 0.5 ? 'B' : 'G'; // viseme_kk or viseme_FF
+                        // Dental/alveolar consonants (d, t, n, l)
+                        viseme = 'viseme_DD';
                       }
-                    } else if (normalizedLevel > 0.05) {
-                      // Lower volume speech
-                      viseme = 'A'; // viseme_PP for general speech
                     }
-                    
-                    // Calculate mouth movements with natural variation
-                    mouthOpen = Math.min(normalizedLevel * 2.5, 1); // Amplify for visibility
-                    mouthSmile = normalizedLevel * 0.15; // Subtle smile during speech
                   }
                   
-                  // Generate comprehensive lip sync data
+                  // Generate lip sync data with Oculus viseme
                   setLipSyncData({
                     viseme: viseme,
-                    mouthOpen: mouthOpen,
-                    mouthSmile: mouthSmile,
-                    jawOpen: mouthOpen * 0.7, // Jaw follows mouth but less pronounced
                     audioLevel: normalizedLevel,
                     // Raw frequency data for debugging
                     frequencies: {
