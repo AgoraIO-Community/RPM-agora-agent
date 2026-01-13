@@ -11,7 +11,8 @@ let SomeMessage = null;
 const loadProtoSchema = async () => {
   if (!protoRoot) {
     try {
-      protoRoot = await protobuf.load('/agora-agent/schema.proto');
+      const schemaPath = `${import.meta.env.BASE_URL}schema.proto`;
+      protoRoot = await protobuf.load(schemaPath);
       SomeMessage = protoRoot.lookupType('SomeMessage');
       console.log('✅ Protobuf schema loaded successfully');
     } catch (error) {
