@@ -57,7 +57,7 @@ To build real-time AI avatars with lip sync using Agora, you must have:
 
 - A valid [Agora account](https://console.agora.io/). If you don't have one, see [Get Started with Agora](https://www.agora.io/en/blog/how-to-get-started-with-agora?utm_source=medium&utm_medium=blog&utm_campaign=Build_RealTime_AI_Avatars_with_Lip_Sync_Using_Agora_ConvoAI)
 - An Agora App ID and temporary token from the [Agora Console](https://console.agora.io/restful-api)
-- Agora ConvoAI API credentials (API key and password)
+- Agora ConvoAI API credentials ("Customer ID" and "Customer Secret")
 - [Node.js](https://nodejs.org/) 20+ (LTS) and npm installed
 - Basic knowledge of [JavaScript and React](https://react.dev/)
 - An [OpenAI API key](https://platform.openai.com/) or compatible LLM API
