@@ -1,7 +1,7 @@
 # 🎭 3D Agora Agent with Real-Time AI & Lip Sync
 ![Agora_Agents (1)](https://github.com/user-attachments/assets/d32de4cc-a2ea-4e6d-a4d0-76975c77c368)
 
-**Live Demo**: https://chitimalli.github.io/agora-agent/
+**Live Demo**: https://agoraio-community.github.io/RPM-agora-agent/
 
 > **Advanced 3D Avatar with Agora ConvoAI Integration and Real-Time Lip Synchronization**
 
