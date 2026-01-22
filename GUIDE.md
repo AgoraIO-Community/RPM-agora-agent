@@ -133,7 +133,7 @@ First, we need to establish the real-time voice connection that will power our A
 
 2. **Initialize the Agora RTC client**
 
-   In `src/hooks/useAgora.jsx`, the client is created in 'live' mode with initial 'audience' role: This is done to have the ConvoAI Agent start starting to the user with no delay, initially the Agent starts talking and the user is just listening. You only need 'Host' mode for the user when the user wnats to talk to the Agent as well.
+   In `src/hooks/useAgora.jsx`, the client is created in 'live' mode with 'host' role to enable immediate two-way communication with the ConvoAI Agent.
 
    ```javascript
    import AgoraRTC from "agora-rtc-sdk-ng";
@@ -144,13 +144,13 @@ First, we need to establish the real-time voice connection that will power our A
      codec: 'vp8' 
    });
 
-   // Set client role to audience initially
-   await agoraClient.setClientRole('audience');
+   // Set client role to host for publishing audio
+   await agoraClient.setClientRole('host');
    ```
 
 3. **Join the Agora channel**
 
-   Create the microphone track, join the channel, and publish the audio: Here when the users is ready to publish, we now chang the users role from 'audience' that we used initially, to 'host' role, that way the user can now puiblish audio into the channle for the SST -> LLM to kick in.
+   Create the microphone track, join the channel, and publish the audio. Since we're already in host role, we can immediately publish audio for the ASR → LLM pipeline.
 
    ```javascript
    const joinChannel = async () => {
@@ -172,10 +172,7 @@ First, we need to establish the real-time voice connection that will power our A
        agoraConfig.uid
      );
      
-     // Switch to host role to publish audio
-     await client.setClientRole('host');
-     
-     // Publish local audio track
+     // Publish local audio track (already in host role)
      await client.publish([audioTrack]);
      
      setIsJoined(true);
