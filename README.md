@@ -188,7 +188,7 @@ You provide all API credentials and control spending:
 ### **Local Development**
 ```bash
 # Clone repository
-git clone https://github.com/chitimalli/agora-agent.git
+git clone https://github.com/AgoraIO-Community/RPM-agora-agent.git
 cd agora-agent
 
 # Install dependencies

@@ -514,15 +514,15 @@ export const AgoraProvider = ({ children }) => {
         // Configure Agora for better connection handling
         AgoraRTC.setLogLevel(1); // Reduce log verbosity to avoid WebSocket spam
         
-        // FIXED: Use 'live' mode with 'audience' role for communication-style audio
+        // Create Agora client in LIVE mode with HOST role
         const agoraClient = AgoraRTC.createClient({ 
-          mode: 'live', // Changed from 'rtc' to 'live' for better audio handling
+          mode: 'live',
           codec: 'vp8' 
         });
         
-        // Set client role to audience initially, then switch to host when joining
-        await agoraClient.setClientRole('audience');
-        console.log('🎯 Agora client created in LIVE mode with AUDIENCE role');
+        // Set client role to host for publishing audio
+        await agoraClient.setClientRole('host');
+        console.log('🎯 Agora client created in LIVE mode with HOST role');
         
         // Set up event handlers
         agoraClient.on('user-published', async (user, mediaType) => {
@@ -1124,10 +1124,6 @@ export const AgoraProvider = ({ children }) => {
         agoraConfig.token,
         agoraConfig.uid
       );
-      
-      // CRITICAL: Switch to host role to publish audio
-      console.log('🎙️ Switching to HOST role to publish audio...');
-      await client.setClientRole('host');
       
       // Publish local audio track
       console.log('Publishing local audio track...');
