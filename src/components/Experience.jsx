@@ -37,7 +37,17 @@ const Dots = (props) => {
   );
 };
 
-export const Experience = ({ currentExpression, currentAnimation, currentAvatar }) => {
+export const Experience = ({ 
+  currentExpression, 
+  currentAnimation, 
+  currentAvatar,
+  manualBlendShapes,
+  manualViseme,
+  visualizerViseme,
+  visualizerAudioLevel,
+  showWireframe,
+  showVertices
+}) => {
   const cameraControls = useRef();
   const { cameraZoomed } = useChat();
 
@@ -66,6 +76,12 @@ export const Experience = ({ currentExpression, currentAnimation, currentAvatar 
           currentExpression={currentExpression} 
           currentAnimation={currentAnimation}
           currentAvatar={currentAvatar}
+          manualBlendShapes={manualBlendShapes}
+          manualViseme={manualViseme}
+          visualizerViseme={visualizerViseme}
+          visualizerAudioLevel={visualizerAudioLevel}
+          showWireframe={showWireframe}
+          showVertices={showVertices}
         />
       </Suspense>
       <ContactShadows opacity={0.7} />
