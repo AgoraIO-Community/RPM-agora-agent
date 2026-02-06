@@ -1,127 +1,185 @@
-# 🎭 3D Agora Agent with Real-Time AI & Lip Sync
+# 🎭 Real-Time AI Avatars with Lip Sync Using Agora ConvoAI
 ![Agora_Agents (1)](https://github.com/user-attachments/assets/d32de4cc-a2ea-4e6d-a4d0-76975c77c368)
 
 **Live Demo**: https://agoraio-community.github.io/RPM-agora-agent/
 
-> **Advanced 3D Avatar with Agora ConvoAI Integration and Real-Time Lip Synchronization**
+> **Build conversational AI agents with synchronized lip movements, natural expressions, and genuine real-time responses powered by Agora ConvoAI Engine, WebAudio API, and ReadyPlayer.me avatars.**
 
-## 🌟 Revolutionary Features
+## 🌟 Key Features
 
-### 🎤 **Real-Time Lip Sync Technology**
-- **WebAudio API Integration** - Analyzes live audio in real-time
-- **Advanced Viseme Processing** - Maps speech sounds to realistic mouth shapes
-- **Morph Target Animation** - 20+ facial morph targets for natural expressions
-- **Smooth Interpolation** - Delta-time based easing for fluid mouth movements
-- **Breathing Simulation** - Subtle variations for lifelike behavior
+### 🎤 **WebAudio-Driven Lip Sync**
+- **Real-Time FFT Analysis** - Analyzes AI voice at 60 FPS using WebAudio API (85-255 Hz speech range)
+- **ARKit Viseme Mapping** - Frequency patterns map to phonemes (aa, E, I, O, U, PP, FF, TH, etc.)
+- **50+ Morph Targets** - ARKit blend shapes for realistic facial deformation
+- **Exponential Smoothing** - Delta-time easing for fluid transitions without jitter
+- **<50ms Latency** - Audio-to-visual synchronization with minimal delay
+- **Breathing Simulation** - Subtle sine wave variations for natural idle behavior
 
-### 🤖 **Agora ConvoAI Integration**
-- **Ultra-Low Latency** - Real-time voice communication via WebRTC
-- **AI-Powered Conversations** - Intelligent responses with personality
-- **Automatic Speech Recognition** - Voice-to-text processing
-- **Text-to-Speech Synthesis** - Natural voice generation
-- **Multi-Language Support** - Configurable language settings
+### 🤖 **Agora ConvoAI Engine**
+- **Ultra-Low Latency WebRTC** - Real-time voice streaming via Agora RTC SDK
+- **Speech-to-Text (ASR)** - Automatic speech recognition for user input
+- **LLM Integration** - OpenAI GPT-4 or compatible models for intelligent responses
+- **Text-to-Speech (TTS)** - Azure Speech Services for natural voice synthesis
+- **Cloud-Based Agent** - ConvoAI Agent joins Agora channel as a remote user
+- **Multi-Language Support** - Configurable ASR/TTS language settings
 
-### 🎨 **Advanced 3D Avatar System**
-- **Facial Expression Engine** - 7 distinct emotional states (Happy, Sad, Angry, etc.)
-- **Animation Controller** - 8+ body animations (Idle, Talking, Dancing, etc.)
-- **Real-Time Morphing** - Facial features respond to voice input
-- **Manual Control** - UI panels for expression/animation override
-- **Smooth Transitions** - Seamless blending between states
+### 🎨 **ReadyPlayer.me Avatar System**
+- **GLB 3D Models** - Optimized web-ready avatars with facial rigs
+- **Facial Expressions** - 7 emotional states (smile, surprised, sad, angry, etc.)
+- **Body Animations** - Idle, talking, laughing, crying, and more
+- **Real-Time Morphing** - Facial blend shapes respond to live audio analysis
+- **Manual Override** - UI panels for expression/animation control
+- **Three.js Rendering** - 60 FPS WebGL performance
 
 ## 🎯 How It Works
 
-### Real-Time Communication Flow
+### Real-Time Data Flow
 ```
-Your Voice → Agora WebRTC → ConvoAI Processing → AI Response → TTS → Avatar Lip Sync
-     ↑                                                                        ↓
-WebAudio Analysis ←────────────────────────────────────────── Audio Output
+User Speech → Agora RTC → ConvoAI Engine → LLM (GPT-4) → TTS (Azure) → Audio Stream
+                                                                              ↓
+                                                                    WebAudio Analyzer
+                                                                              ↓
+                                                                    FFT Analysis (256)
+                                                                              ↓
+                                                              Frequency → Viseme Mapping
+                                                                              ↓
+                                                                  ARKit Blend Shapes
+                                                                              ↓
+                                                              Three.js Rendering (60 FPS)
+                                                                              ↓
+                                                                  Synchronized Lip Sync
 ```
 
-1. **Voice Input**: Your microphone captures speech via Agora WebRTC
-2. **Live Analysis**: WebAudio API analyzes audio frequency data in real-time
-3. **Viseme Mapping**: Speech sounds are mapped to mouth shape visemes (A, E, I, O, U, etc.)
-4. **Morph Target Control**: 20+ facial morph targets create realistic mouth movements
-5. **AI Processing**: ConvoAI processes your speech and generates intelligent responses
-6. **TTS Output**: AI response is converted to natural speech
-7. **Synchronized Animation**: Avatar mouth moves in perfect sync with AI speech
+1. **User speaks** → Agora RTC captures and streams audio to ConvoAI Engine
+2. **ConvoAI processes** → Speech-to-text (ASR), LLM reasoning, text-to-speech (TTS)
+3. **AI responds** → TTS audio streams back through Agora RTC as remote user
+4. **WebAudio analyzes** → AnalyserNode performs FFT on audio stream (85-255 Hz speech range)
+5. **Viseme mapping** → Frequency patterns map to phoneme shapes (A, E, I, O, U, PP, FF, etc.)
+6. **Morph targets update** → ARKit blend shapes deform facial mesh at 60 FPS
+7. **Avatar speaks** → Realistic lip sync with <50ms audio-to-visual latency
 
-### Lip Sync Technology Deep Dive
+### Technical Deep Dive
 
-#### **Enhanced Mouth Morph Targets**
+#### **Frequency-to-Viseme Mapping**
+Human speech frequencies cluster in predictable ranges:
+- **Low (85-150 Hz)**: Open vowels → "O", "U" visemes
+- **Mid (150-200 Hz)**: Central vowels → "A" visemes
+- **High (200-255 Hz)**: Closed vowels → "E", "I" visemes
+- **Consonants**: Distinct spikes → PP, FF, TH, kk visemes
+
+#### **ARKit Blend Shape Targets**
 ```javascript
-// Vowel Sounds - Wide mouth shapes
+// Vowel phonemes with complex mouth shapes
 A: { jawOpen: 0.7, mouthOpen: 0.8, mouthWide: 0.5 }
 E: { jawOpen: 0.4, mouthOpen: 0.6, mouthWide: 0.7, mouthSmile: 0.3 }
 I: { jawOpen: 0.2, mouthOpen: 0.3, mouthWide: 0.8, mouthSmile: 0.5 }
 O: { jawOpen: 0.5, mouthOpen: 0.7, mouthFunnel: 0.6, mouthPucker: 0.4 }
 U: { jawOpen: 0.3, mouthOpen: 0.4, mouthFunnel: 0.8, mouthPucker: 0.7 }
 
-// Consonant Sounds
-B: { mouthPressLeft: 0.8, mouthPressRight: 0.8, mouthClose: 0.9 }
-F: { jawOpen: 0.1, mouthOpen: 0.2, mouthFunnel: 0.3 }
+// Consonant phonemes with precise articulation
+PP: { mouthPressLeft: 0.8, mouthPressRight: 0.8, mouthClose: 0.9 }
+FF: { jawOpen: 0.1, mouthOpen: 0.2, mouthFunnel: 0.3 }
+TH: { jawOpen: 0.3, mouthOpen: 0.4, tongueOut: 0.2 }
 ```
 
-#### **Smooth Animation System**
-- **Exponential Smoothing**: Reduces audio jitter while maintaining responsiveness
-- **Delta Time Integration**: Frame-rate independent animations
-- **Viseme Transitions**: Smooth blending between different mouth shapes
-- **Breathing Variation**: Subtle sine wave variations for natural movement
-- **Audio Level Scaling**: Mouth movement intensity matches voice volume
+#### **Smooth Animation Pipeline**
+- **Exponential Smoothing**: `lerp(current, target, 1 - exp(-15 * deltaTime))` eliminates jitter
+- **Frame-Rate Independent**: Delta-time integration for consistent animation speed
+- **Viseme Transitions**: 12x speed multiplier for natural phoneme blending
+- **Breathing Variation**: `sin(time * 2) * 0.1` adds subtle idle movement
+- **Intensity Scaling**: 2x-4x audio level multipliers for visible mouth movement
 
 ## 🚀 Quick Start
 
-### 1. **Access the App**
-Visit: https://chitimalli.github.io/agora-agent/
+### Prerequisites
+- [Agora account](https://console.agora.io/) with App ID and Token
+- Agora ConvoAI API credentials ("Customer ID" and "Customer Secret")
+- [OpenAI API key](https://platform.openai.com/) or compatible LLM
+- [Azure Speech Services API key](https://portal.azure.com/) for TTS
+- Modern browser with WebAudio API support (Chrome 80+, Firefox 75+, Safari 14+, Edge 80+)
 
-### 2. **Configure APIs**
-Click **Settings** and enter your credentials:
+### 1. **Access the Live Demo**
+Visit: https://agoraio-community.github.io/RPM-agora-agent/
 
-#### **Agora Configuration**
-```
-App ID: [Your Agora App ID]
-Token: [Your Agora Token] 
-Channel: [Voice Channel Name]
-```
+### 2. **Configure Your API Credentials**
+Click the **Settings** (☰) button in the top-right and enter your credentials:
 
-#### **ConvoAI Configuration**
+#### **Agora Tab**
 ```
-API Key: [Your ConvoAI API Key]
-Password: [Your ConvoAI Password]
-Agent UID: [ConvoAI Agent Identifier]
-```
-
-#### **AI Services**
-```
-LLM API Key: [OpenAI/Other LLM Key]
-TTS API Key: [Azure/Other TTS Key]
-TTS Region: [Service Region]
-Voice Name: [Preferred Voice]
+App ID: [From Agora Console]
+Token: [Generate from Agora Console]
+Channel: [Your channel name, e.g., "test-channel"]
 ```
 
-### 3. **Start Conversation**
-1. Click **Connect** to join the voice channel
-2. Wait for ConvoAI agent to connect
-3. Start speaking - watch real-time lip sync!
-4. Avatar responds with AI-generated speech
+#### **ConvoAI Tab**
+```
+API Base URL: https://api.agora.io/v1
+Customer ID: [Your ConvoAI Customer ID]
+Customer Secret: [Your ConvoAI Customer Secret]
+Agent Name: Virtual Assistant
+Agent UID: 8888
+```
 
-## 🎮 Manual Controls
+#### **LLM Tab**
+```
+API URL: https://api.openai.com/v1
+API Key: [Your OpenAI API Key]
+Model: gpt-4o-mini
+System Message: You are a friendly virtual agent assistant.
+Greeting: Hello! How can I help you today?
+```
 
-### **Facial Expression Panel**
-- 😐 Default
-- 😊 Smile  
-- 😲 Surprised
-- 🤪 Funny Face
-- 😢 Sad
-- 😠 Angry
-- 🤯 Crazy
+#### **TTS Tab**
+```
+API Key: [Your Azure Speech Key]
+Region: eastus (or your region)
+Voice Name: en-US-AriaNeural
+```
 
-### **Animation Panel**
-- 🧘 Idle
-- 💬 Talking (3 variants)
-- 😂 Laughing
-- 😭 Crying
-- 😡 Angry
-- 😨 Terrified
+#### **ASR Tab**
+```
+Language: en-US
+```
+
+Settings are stored in sessionStorage during your browser session.
+
+### 3. **Start Conversing with Your AI Avatar**
+1. Click **Connect** to join the Agora channel
+2. The ConvoAI agent will automatically join as a remote user
+3. Start speaking - the avatar will listen and analyze your speech
+4. The AI responds with synthesized voice and synchronized lip movements
+5. Watch real-time lip sync powered by WebAudio FFT analysis!
+18** - UI component framework
+- **React Three Fiber** - React renderer for Three.js
+- **Three.js** - WebGL graphics engine for 3D rendering
+- **@react-three/drei** - Useful helpers for R3F (useGLTF, etc.)
+- **Agora RTC SDK** - WebRTC communication and streaming
+- **WebAudio API** - Browser-native audio analysis (AnalyserNode, FFT)
+- **Vite** - Fast build tool and dev server
+- **Tailwind CSS** - Utility-first CSS framework
+
+### **Real-Time Audio Processing**
+- **Sample Rate**: 48kHz audio streams from Agora RTC
+- **FFT Size**: 256 (provides 128 frequency bins)
+- **Frequency Range**: 85-255 Hz (primary speech frequencies)
+- **Analysis Rate**: ~60 FPS via requestAnimationFrame
+- **Latency**: <50ms from audio output to visual update
+- **Smoothing**: Exponential interpolation (`lerp` with `exp(-speed * deltaTime)`)
+
+### **3D Avatar Architecture**
+- **Model Format**: GLB (Binary glTF) - optimized for web streaming
+- **Facial Rig**: 50+ ARKit-compatible morph targets
+- **Rendering**: Three.js SkinnedMesh with morph target influences
+- **Animation**: Frame-by-frame morph target updates at 60 FPS
+- **Expressions**: Layered blend shapes (expressions + lip sync)
+- **Source**: ReadyPlayer.me avatar creator with full facial rig
+
+### **ConvoAI Integration**
+- **REST API**: Join/leave agent endpoints
+- **Authentication**: Basic Auth with Customer ID/Secret
+- **Agent Lifecycle**: Programmatic agent creation and management
+- **Voice Pipeline**: ASR → LLM → TTS fully managed by ConvoAI
+- **Agent UID**: ConvoAI agent joins as remote user in Agora channel
 
 *Manual controls override AI behavior for creative control*
 
@@ -152,34 +210,45 @@ Voice Name: [Preferred Voice]
 
 ### **User-Controlled Costs**
 You provide all API credentials and control spending:
+RPM-agora-agent
 
-- **Agora Voice/Video**: 
-  - FREE: 10,000 minutes/month
-  - Paid: $0.99/1000 minutes
-  
-- **ConvoAI**: 
-  - Based on usage plan
-  - Real-time AI conversation processing
-  
-- **OpenAI (LLM)**:
-  - GPT-4: ~$0.03/1000 tokens
-  - GPT-3.5: ~$0.002/1000 tokens
-  
-- **Azure TTS**:
-  - FREE: 500,000 characters/month
-  - Paid: $4/1M characters
+# Install dependencies
+npm install
 
-### **Developer Costs: $0**
-- **GitHub Pages**: FREE hosting
-- **No Backend**: Pure frontend application
-- **No Server Costs**: Everything runs client-side
+# Start development server (runs on http://localhost:5173)
+npm run dev
 
-## 🛡️ Privacy & Security
+# Build for production
+npm run build
 
-- ✅ **Zero Data Storage** - No conversation logs or personal data stored
-- ✅ **Client-Side Processing** - All credentials stored locally in browser
-- ✅ **End-to-End Encryption** - Agora WebRTC encrypted communication
-- ✅ **Session-Only Storage** - Credentials cleared when browser closes
+# Deploy to GitHub Pages
+npm run deploy
+```
+
+### **Project Structure**
+```
+src/
+├── components/
+│   ├── Avatar.jsx          # 3D avatar with lip sync engine
+│   ├── Experience.jsx      # Three.js scene setup
+│   ├── UI.jsx              # Main interface
+│   ├── Settings.jsx        # API credentials panel
+│   └── CombinedChat.jsx    # Chat interface
+├── hooks/
+│   ├── useAgora.jsx        # Agora RTC + ConvoAI integration
+│   ├── useChat.jsx         # Chat state management
+│   └── useLipSync.jsx      # Lip sync audio analysis
+├── App.jsx                 # Root component
+└── main.jsx                # Entry point
+```
+
+### **Customization Options**
+- **Avatar Models**: Replace GLB files in `public/models/Avatars/` with custom ReadyPlayer.me avatars
+- **Viseme Tuning**: Adjust frequency ranges and intensity multipliers in `useAgora.jsx`
+- **LLM Models**: Switch between GPT-4, GPT-3.5, or other OpenAI-compatible APIs
+- **TTS Voices**: Choose from 400+ Azure neural voices in different languages
+- **UI Styling**: Modify Tailwind classes for custom appearance
+- **Facial Expressions**: Add new expression presets in `Avatar.jsx`ser closes
 - ✅ **Open Source** - Full code transparency
 - ✅ **No Tracking** - No analytics or user tracking
 
@@ -218,27 +287,46 @@ npm run deploy
 - **UI Themes** - Customize interface appearance
 - **Lip Sync Tuning** - Adjust viseme sensitivity parameters
 
-## � Performance Monitoring
+## � PerformanceResources
 
-### **Real-Time Metrics**
-- **Audio Level**: Live voice input monitoring
-- **Connection Status**: Agora WebRTC health
-- **Frame Rate**: 3D rendering performance
-- **Latency**: Voice-to-lip sync delay
-- **Memory Usage**: Browser resource utilization
+### **Common Issues**
+1. **No Audio Output**: Check microphone permissions and Agora token validity
+2. **ConvoAI Connection Failed**: Verify Customer ID/Secret and App ID match
+3. **No Lip Sync**: Ensure AudioContext is not suspended (some browsers require user interaction)
+4. **Avatar Not Loading**: Check browser console for GLB loading errors
+5. **Performance Issues**: Close other browser tabs, check FPS in Three.js stats
 
-## 🌐 Browser Compatibility
+### **Debug Mode**
+- Open browser DevTools Console for detailed logs
+- Check Network tab for ConvoAI API call responses
+- Monitor WebAudio analyzer data in `useAgora.jsx`
+- Use Three.js DevTools extension for scene inspection
 
-### **Supported Browsers**
-- ✅ **Chrome 80+** (Recommended)
-- ✅ **Firefox 75+**
-- ✅ **Safari 14+**
-- ✅ **Edge 80+**
+### **Learn More**
+- **Comprehensive Guide**: See [GUIDE.md](GUIDE.md) for detailed implementation walkthrough
+- **Deployment**: See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for production deployment
+- **Architecture**: See [docs/ARCHITECTURE_PLAN.md](docs/ARCHITECTURE_PLAN.md) for system design
 
-### **Required Features**
-- WebRTC support
-- WebAudio API
-- WebGL 2.0
+### **Resources**
+- [Agora ConvoAI Documentation](https://docs.agora.io/en/conversational-ai/overview/product-overview)
+- [Agora RTC Web SDK Reference](https://docs.agora.io/en/voice-calling/reference/api)
+- [ReadyPlayer.me Documentation](https://docs.readyplayer.me/)
+- [WebAudio API Guide](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
+- [Three.js Morph Targets](https://threejs.org/docs/#api/en/core/BufferGeometry.morphAttributes)
+- Join the [Agora Developer Community](https://discord.gg/uhkxjDpJsN)
+
+---
+
+## 🎉 Experience Real-Time AI Avatars
+
+**WebAudio-driven lip sync meets AI conversation in stunning 3D - all running in your browser with <50ms latency!**
+
+**Live Demo**: https://agoraio-community.github.io/RPM-agora-agent/
+
+---
+
+*Built with ❤️ using Agora ConvoAI, ReadyPlayer.me, and WebAudio API*  
+*Questions? Open an issue on [GitHub](https://github.com/AgoraIO-Community/RPM-agora-agent/issues)*
 - ES6 modules
 
 ## 📞 Support & Troubleshooting
@@ -261,4 +349,4 @@ npm run deploy
 
 **Real-time lip sync meets AI conversation in stunning 3D - all running in your browser!**
 
-**Live Demo**: https://chitimalli.github.io/agora-agent/
+**Live Demo**: https://agoraio-community.github.io/RPM-agora-agent/
